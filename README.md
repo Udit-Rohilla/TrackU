@@ -167,16 +167,6 @@ TrackU is deployed using Vercel.
 * Environment variables managed securely through Vercel dashboard
 * Continuous deployment enabled for production updates
 
-## Screenshots
-
-Add screenshots here:
-
-```text
-/screenshots/dashboard.png
-/screenshots/board-view.png
-/screenshots/calendar-view.png
-/screenshots/recurring-tasks.png
-```
 
 ## Future Improvements
 
