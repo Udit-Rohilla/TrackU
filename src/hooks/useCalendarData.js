@@ -33,10 +33,12 @@ export function getDayData(date, tasks) {
   const today   = startOfDay(new Date())
   const isPast  = startOfDay(date) < today
 
+  const cutoff = new Date(Date.now() - 168 * 60 * 60 * 1000)
   const completed = tasks.filter(t =>
     t.status === 'done' &&
     t.updated_at &&
-    format(new Date(t.updated_at), 'yyyy-MM-dd') === dateStr
+    format(new Date(t.updated_at), 'yyyy-MM-dd') === dateStr &&
+    new Date(t.updated_at) >= cutoff
   )
 
   const deadlines = tasks.filter(t =>

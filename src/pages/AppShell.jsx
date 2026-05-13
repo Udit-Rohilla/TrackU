@@ -105,7 +105,7 @@ export default function AppShell({ session }) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-hidden flex flex-col bg-white dark:bg-gray-950">
+      <main className="flex-1 overflow-hidden flex flex-col bg-white dark:bg-gray-950 pb-nav-safe">
         <Routes>
           <Route path="/" element={<BoardPage session={session} />} />
           <Route path="/today" element={<TodayPage session={session} />} />
@@ -117,26 +117,28 @@ export default function AppShell({ session }) {
       </main>
 
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 flex">
-        {navItems.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              `flex-1 flex flex-col items-center py-2.5 gap-1 text-[10px] font-medium transition-colors ${
-                isActive ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400 dark:text-gray-500'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon size={20} strokeWidth={isActive ? 2.2 : 1.8} />
-                <span>{label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 pb-safe">
+        <div className="flex">
+          {[...navItems, { to: '/settings', label: 'Settings', icon: Settings }].map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center py-2.5 gap-1 text-[10px] font-medium transition-colors min-w-0 ${
+                  isActive ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400 dark:text-gray-500'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon size={20} strokeWidth={isActive ? 2.2 : 1.8} />
+                  <span className="truncate w-full text-center">{label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
       </nav>
     </div>
   )

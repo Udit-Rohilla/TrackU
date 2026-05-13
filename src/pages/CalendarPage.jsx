@@ -8,12 +8,40 @@ import WeekView from '../components/calendar/WeekView'
 import DayPanel from '../components/calendar/DayPanel'
 import InspectorPanel from '../components/calendar/InspectorPanel'
 
+const RECURRING_FILTERS = [
+  { id: 'all',       label: 'All' },
+  { id: 'recurring', label: 'Recurring' },
+  { id: 'one_time',  label: 'One-time' },
+]
+
+const STATUS_FILTERS = [
+  { id: 'all',         label: 'All',         dot: null },
+  { id: 'in_progress', label: 'In Progress',  dot: 'bg-amber-400' },
+  { id: 'done',        label: 'Done',         dot: 'bg-green-500' },
+]
+
 export default function CalendarPage({ session }) {
   const { tasks, allTags, loading, handleTaskUpdate } = useCalendarData(session)
-  const [viewMode, setViewMode]         = useState(localStorage.getItem('tracku_calendar_view') || 'week')
-  const [currentDate, setCurrentDate]   = useState(new Date())
+
+  const [viewMode, setViewMode]       = useState(localStorage.getItem('tracku_calendar_view') || 'week')
+  const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(null)
   const [inspectedTask, setInspectedTask] = useState(null)
+
+  const [recurringFilter, setRecurringFilter] = useState(
+    () => localStorage.getItem('tracku_cal_recurring') || 'all'
+  )
+  const [statusFilter, setStatusFilter] = useState(
+    () => localStorage.getItem('tracku_cal_status') || 'all'
+  )
+
+  const filteredTasks = tasks.filter(t => {
+    if (recurringFilter === 'recurring' && !t.is_recurring) return false
+    if (recurringFilter === 'one_time' && t.is_recurring) return false
+    if (statusFilter === 'done' && t.status !== 'done') return false
+    if (statusFilter === 'in_progress' && t.status !== 'in_progress' && t.status !== 'on_hold') return false
+    return true
+  })
 
   function goBack() {
     setSelectedDate(null)
@@ -67,6 +95,22 @@ export default function CalendarPage({ session }) {
     if (data) handleTaskUpdate(data)
   }
 
+  function handleRecurringFilter(v) {
+    setRecurringFilter(v)
+    localStorage.setItem('tracku_cal_recurring', v)
+    setInspectedTask(null)
+    setSelectedDate(null)
+  }
+
+  function handleStatusFilter(v) {
+    setStatusFilter(v)
+    localStorage.setItem('tracku_cal_status', v)
+    setInspectedTask(null)
+    setSelectedDate(null)
+  }
+
+  const hasActiveFilters = recurringFilter !== 'all' || statusFilter !== 'all'
+
   const headerTitle = viewMode === 'month'
     ? format(currentDate, 'MMMM yyyy')
     : `${format(startOfWeek(currentDate), 'MMM d')} – ${format(endOfWeek(currentDate), 'MMM d, yyyy')}`
@@ -78,7 +122,7 @@ export default function CalendarPage({ session }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
-      {/* Header */}
+      {/* Main header */}
       <div className="flex items-center justify-between px-6 py-3.5 border-b border-gray-100 dark:border-gray-800 shrink-0">
         <div className="flex items-center gap-2.5">
           <h1 className="text-sm font-semibold text-gray-900 dark:text-white">Calendar</h1>
@@ -118,37 +162,94 @@ export default function CalendarPage({ session }) {
         </div>
       </div>
 
+      {/* Filter strip */}
+      <div className="flex items-center gap-3 px-6 py-2 border-b border-gray-100 dark:border-gray-800 shrink-0">
+
+        {/* Recurring filter */}
+        <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 gap-0.5">
+          {RECURRING_FILTERS.map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => handleRecurringFilter(opt.id)}
+              className={clsx(
+                'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                recurringFilter === opt.id
+                  ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
+              )}
+            >{opt.label}</button>
+          ))}
+        </div>
+
+        <div className="w-px h-3.5 bg-gray-200 dark:bg-gray-700 shrink-0" />
+
+        {/* Status filter */}
+        <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 gap-0.5">
+          {STATUS_FILTERS.map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => handleStatusFilter(opt.id)}
+              className={clsx(
+                'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                statusFilter === opt.id
+                  ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
+              )}
+            >
+              {opt.dot && <span className={clsx('w-1.5 h-1.5 rounded-full shrink-0', opt.dot)} />}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Active filter count + clear */}
+        {hasActiveFilters && (
+          <button
+            onClick={() => { handleRecurringFilter('all'); handleStatusFilter('all') }}
+            className="flex items-center gap-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors ml-1"
+          >
+            <span className="text-[10px] w-4 h-4 rounded-full bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center font-bold">
+              {(recurringFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0)}
+            </span>
+            Clear
+          </button>
+        )}
+
+        {/* Task count indicator */}
+        <span className="ml-auto text-xs text-gray-400 dark:text-gray-500 tabular-nums">
+          {filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'}
+        </span>
+      </div>
+
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-hidden min-w-0 flex">
           {viewMode === 'month' ? (
             <MonthView
               currentDate={currentDate}
-              tasks={tasks}
+              tasks={filteredTasks}
               selectedDate={selectedDate}
               onDateClick={handleDateClick}
             />
           ) : (
             <WeekView
               currentDate={currentDate}
-              tasks={tasks}
+              tasks={filteredTasks}
               onTaskClick={handleTaskClick}
             />
           )}
         </div>
 
-        {/* Day panel for month view (opens on date click, closes when task clicked) */}
         {selectedDate && viewMode === 'month' && !inspectedTask && (
           <DayPanel
             key={selectedDate.toISOString()}
             date={selectedDate}
-            tasks={tasks}
+            tasks={filteredTasks}
             onClose={() => setSelectedDate(null)}
             onTaskClick={handleTaskClick}
           />
         )}
 
-        {/* Inspector panel — opens when any task is clicked */}
         {inspectedTask && (
           <InspectorPanel
             key={inspectedTask.id}

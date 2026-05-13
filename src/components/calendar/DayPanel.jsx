@@ -92,35 +92,53 @@ export default function DayPanel({ date, tasks, onClose, onTaskClick }) {
   const total = completed.length + deadlines.length + overdue.length + recurring.length
 
   return (
-    <div className="w-72 min-w-72 border-l border-gray-100 dark:border-gray-800 flex flex-col bg-white dark:bg-gray-950 animate-slide-right">
+    <>
+      {/* Mobile backdrop */}
+      <div
+        className="md:hidden fixed inset-0 bg-black/30 z-40 animate-fade-in"
+        onClick={onClose}
+      />
 
-      {/* Panel header */}
-      <div className="flex items-start justify-between px-4 py-3.5 border-b border-gray-100 dark:border-gray-800 shrink-0">
-        <div>
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">{format(date, 'EEEE')}</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{format(date, 'MMMM d, yyyy')}</p>
+      {/* Panel — bottom sheet on mobile, side panel on desktop */}
+      <div className={clsx(
+        'bg-white dark:bg-gray-950 flex flex-col',
+        'fixed bottom-0 left-0 right-0 z-50 max-h-[72vh] rounded-t-2xl animate-slide-up',
+        'md:static md:w-72 md:min-w-72 md:rounded-none md:max-h-none md:z-auto md:animate-slide-right',
+        'md:border-l border-gray-100 dark:border-gray-800',
+      )}>
+        {/* Mobile drag handle */}
+        <div className="md:hidden flex justify-center pt-2.5 pb-0 shrink-0">
+          <div className="w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700" />
         </div>
-        <button
-          onClick={onClose}
-          className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-xs mt-0.5"
-        >✕</button>
-      </div>
 
-      {/* Panel content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-        {total === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 gap-1">
-            <p className="text-sm text-gray-400 dark:text-gray-500">No tasks on this day</p>
+        {/* Panel header */}
+        <div className="flex items-start justify-between px-4 py-3.5 border-b border-gray-100 dark:border-gray-800 shrink-0">
+          <div>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">{format(date, 'EEEE')}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{format(date, 'MMMM d, yyyy')}</p>
           </div>
-        ) : (
-          <>
-            <Section type="completed" tasks={completed} onTaskClick={onTaskClick} />
-            <Section type="overdue"   tasks={overdue}   onTaskClick={onTaskClick} />
-            <Section type="deadline"  tasks={deadlines} onTaskClick={onTaskClick} />
-            <Section type="recurring" tasks={recurring} onTaskClick={onTaskClick} />
-          </>
-        )}
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-xs mt-0.5"
+          >✕</button>
+        </div>
+
+        {/* Panel content */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+          {total === 0 ? (
+            <div className="flex flex-col items-center justify-center h-32 gap-1">
+              <p className="text-sm text-gray-400 dark:text-gray-500">No tasks on this day</p>
+            </div>
+          ) : (
+            <>
+              <Section type="completed" tasks={completed} onTaskClick={onTaskClick} />
+              <Section type="overdue"   tasks={overdue}   onTaskClick={onTaskClick} />
+              <Section type="deadline"  tasks={deadlines} onTaskClick={onTaskClick} />
+              <Section type="recurring" tasks={recurring} onTaskClick={onTaskClick} />
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }

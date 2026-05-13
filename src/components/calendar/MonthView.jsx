@@ -4,9 +4,16 @@ import { getDayData } from '../../hooks/useCalendarData'
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+const TYPE_PILL = {
+  overdue:   'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400',
+  deadline:  'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+  recurring: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400',
+  completed: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400',
+}
+
 function getMonthGrid(date) {
-  const year  = date.getFullYear()
-  const month = date.getMonth()
+  const year     = date.getFullYear()
+  const month    = date.getMonth()
   const firstDay = new Date(year, month, 1)
   const offset   = firstDay.getDay()
   const cells    = []
@@ -31,15 +38,15 @@ function getMonthGrid(date) {
 }
 
 export default function MonthView({ currentDate, tasks, selectedDate, onDateClick }) {
-  const cells  = getMonthGrid(currentDate)
-  const today  = startOfDay(new Date())
+  const cells = getMonthGrid(currentDate)
+  const today = startOfDay(new Date())
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden min-w-0">
       {/* Day-of-week headers */}
       <div className="grid grid-cols-7 border-b border-gray-100 dark:border-gray-800 shrink-0">
         {DAY_LABELS.map(d => (
-          <div key={d} className="py-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">
+          <div key={d} className="py-2.5 text-center text-xs font-semibold text-gray-400 dark:text-gray-500 tracking-wide">
             {d}
           </div>
         ))}
@@ -47,8 +54,8 @@ export default function MonthView({ currentDate, tasks, selectedDate, onDateClic
 
       {/* Grid */}
       <div
-        className="flex-1 grid grid-cols-7"
-        style={{ gridAutoRows: '1fr' }}
+        className="flex-1 grid grid-cols-7 overflow-hidden"
+        style={{ gridAutoRows: 'minmax(80px, 1fr)' }}
       >
         {cells.map((cell, i) => {
           const { completed, deadlines, overdue, recurring } = getDayData(cell.date, tasks)
@@ -57,41 +64,62 @@ export default function MonthView({ currentDate, tasks, selectedDate, onDateClic
           const total      = completed.length + deadlines.length + overdue.length + recurring.length
           const clickable  = total > 0 || isToday
 
+          // Merge into prioritised list for display
+          const allEntries = [
+            ...overdue.map(t => ({ task: t, type: 'overdue' })),
+            ...deadlines.map(t => ({ task: t, type: 'deadline' })),
+            ...recurring.map(t => ({ task: t, type: 'recurring' })),
+            ...completed.map(t => ({ task: t, type: 'completed' })),
+          ]
+          const visible   = allEntries.slice(0, 2)
+          const remaining = allEntries.length - visible.length
+
           return (
             <div
               key={i}
               onClick={() => clickable && onDateClick(cell.date)}
               className={clsx(
-                'border-b border-r border-gray-100 dark:border-gray-800 p-1.5 flex flex-col transition-colors',
+                'border-b border-r border-gray-100 dark:border-gray-800 p-1.5 flex flex-col transition-colors overflow-hidden',
                 cell.isCurrentMonth
                   ? 'bg-white dark:bg-gray-950'
                   : 'bg-gray-50/60 dark:bg-gray-900/40',
-                clickable && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/70',
+                clickable && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/70 active:bg-purple-50/60 dark:active:bg-purple-950/20',
                 isSelected && '!bg-purple-50 dark:!bg-purple-950/30',
               )}
             >
-              {/* Date number */}
-              <div className={clsx(
-                'w-6 h-6 flex items-center justify-center rounded-full text-xs font-medium self-start mb-1',
-                isToday
-                  ? 'bg-purple-600 text-white'
-                  : cell.isCurrentMonth
-                    ? 'text-gray-700 dark:text-gray-300'
-                    : 'text-gray-300 dark:text-gray-600',
-              )}>
-                {cell.date.getDate()}
+              {/* Date number row */}
+              <div className="flex items-start justify-between mb-1 shrink-0">
+                <div className={clsx(
+                  'w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold',
+                  isToday
+                    ? 'bg-purple-600 text-white'
+                    : cell.isCurrentMonth
+                      ? 'text-gray-700 dark:text-gray-300'
+                      : 'text-gray-300 dark:text-gray-600',
+                )}>
+                  {cell.date.getDate()}
+                </div>
+                {remaining > 0 && (
+                  <span className="text-[9px] text-gray-400 dark:text-gray-500 font-medium leading-6 pr-0.5">
+                    +{remaining}
+                  </span>
+                )}
               </div>
 
-              {/* Indicator dots */}
-              {total > 0 && (
-                <div className="flex items-center gap-0.5 flex-wrap mt-auto">
-                  {completed.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />}
-                  {overdue.length   > 0 && <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />}
-                  {deadlines.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />}
-                  {recurring.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
-                  {total > 1 && (
-                    <span className="text-[9px] leading-none text-gray-400 dark:text-gray-500 ml-0.5 tabular-nums">{total}</span>
-                  )}
+              {/* Task name pills */}
+              {visible.length > 0 && (
+                <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
+                  {visible.map(({ task, type }) => (
+                    <div
+                      key={task.id}
+                      className={clsx(
+                        'text-[10px] font-medium truncate rounded px-1 leading-[1.4] py-px',
+                        TYPE_PILL[type],
+                      )}
+                    >
+                      {type === 'completed' ? '✓ ' : ''}{task.title}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

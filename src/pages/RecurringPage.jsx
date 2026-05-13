@@ -222,7 +222,7 @@ export default function RecurringPage({ session }) {
       </div>
 
       {/* Columns — key triggers re-mount → re-animates on tab switch */}
-      <div key={tabKey} className="flex gap-5 px-6 py-5 overflow-x-auto flex-1 animate-fade-up">
+      <div key={tabKey} className="flex flex-col md:flex-row gap-4 md:gap-5 px-4 md:px-6 py-5 overflow-y-auto md:overflow-x-auto flex-1 animate-fade-up">
         {FREQUENCIES.map(f => (
           <RecurringColumn
             key={f.type}

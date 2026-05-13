@@ -69,9 +69,9 @@ export default function KanbanColumn({
   const showAtEnd = dropIndicator?.atEnd && !isAdding
 
   return (
-    <div className="flex flex-col w-72 min-w-72 self-start">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-3 px-1">
+    <div className="flex flex-col w-full md:w-72 md:min-w-72 md:self-start">
+      {/* Header — sticky on mobile so status label stays visible while scrolling */}
+      <div className="sticky top-0 z-10 bg-white dark:bg-gray-950 md:bg-transparent md:static flex items-center gap-2 py-2 md:py-0 mb-2 md:mb-3 px-1">
         <span className={clsx('w-2 h-2 rounded-full shrink-0', meta.dot)} />
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
         <span className="text-xs text-gray-400 dark:text-gray-600 font-medium tabular-nums">{tasks.length}</span>

@@ -52,7 +52,7 @@ function normalizeTasks(data = []) {
 export default function BoardPage({ session }) {
   const [tasks, setTasks]               = useState([])
   const [allTags, setAllTags]           = useState([])
-  const [activeFilter, setActiveFilter] = useState(() => localStorage.getItem('tracku_board_filter') || 'all')
+  const [activeFilter, setActiveFilter] = useState(() => localStorage.getItem('tracku_board_default') || 'all')
   const [sortBy, setSortBy]             = useState(() => localStorage.getItem('tracku_board_sort') || 'position')
   const [priorityFilter, setPriorityFilter] = useState('all')
   const [filterKey, setFilterKey]       = useState(0)
@@ -72,7 +72,7 @@ export default function BoardPage({ session }) {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor,   { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 500, tolerance: 10 } }),
   )
 
   const dropAnimation = {
@@ -147,10 +147,10 @@ export default function BoardPage({ session }) {
       .order('name')
     const tags = data || []
     setAllTags(tags)
-    const saved = localStorage.getItem('tracku_board_filter')
+    const saved = localStorage.getItem('tracku_board_default')
     if (saved && saved !== 'all' && !tags.find(t => t.id === saved)) {
       setActiveFilter('all')
-      localStorage.setItem('tracku_board_filter', 'all')
+      localStorage.setItem('tracku_board_default', 'all')
     }
   }
 
@@ -214,7 +214,6 @@ export default function BoardPage({ session }) {
     if (id === activeFilter) return
     setActiveFilter(id)
     setFilterKey(k => k + 1)
-    localStorage.setItem('tracku_board_filter', id)
   }
 
   function handleSortChange(sort) {
@@ -630,23 +629,31 @@ export default function BoardPage({ session }) {
         onDragEnd={handleDragEnd}
         onDragCancel={() => { setActiveTask(null); setDropIndicator(null) }}
       >
-        <div key={filterKey} className="flex gap-5 px-6 py-5 flex-1 overflow-x-auto animate-fade-up">
+        <div
+          key={filterKey}
+          className="flex flex-1 overflow-x-auto animate-fade-up snap-x snap-mandatory md:snap-none md:gap-5 md:px-6 md:py-5"
+          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+        >
           {COLUMNS.map(col => (
-            <KanbanColumn
+            <div
               key={col.id}
-              id={col.id}
-              label={col.label}
-              tasks={tasksByStatus[col.id]}
-              onAddTask={handleAddTask}
-              onCardClick={setEditingTask}
-              onHold={handleToggleHold}
-              isAdding={addingToColumn === col.id}
-              onStartAdding={() => setAddingToColumn(col.id)}
-              onStopAdding={() => setAddingToColumn(null)}
-              allTags={allTags}
-              activeFilterTagId={activeFilter}
-              dropIndicator={dropIndicator?.colId === col.id ? dropIndicator : null}
-            />
+              className="w-screen shrink-0 snap-start overflow-y-auto px-4 py-4 h-full md:w-auto md:h-auto md:shrink md:snap-align-none md:overflow-visible md:p-0"
+            >
+              <KanbanColumn
+                id={col.id}
+                label={col.label}
+                tasks={tasksByStatus[col.id]}
+                onAddTask={handleAddTask}
+                onCardClick={setEditingTask}
+                onHold={handleToggleHold}
+                isAdding={addingToColumn === col.id}
+                onStartAdding={() => setAddingToColumn(col.id)}
+                onStopAdding={() => setAddingToColumn(null)}
+                allTags={allTags}
+                activeFilterTagId={activeFilter}
+                dropIndicator={dropIndicator?.colId === col.id ? dropIndicator : null}
+              />
+            </div>
           ))}
         </div>
         <DragOverlay dropAnimation={dropAnimation}>

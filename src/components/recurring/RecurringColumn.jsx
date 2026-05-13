@@ -32,7 +32,7 @@ export default function RecurringColumn({ type, label, tasks, onMarkDone, onCard
   }
 
   return (
-    <div className="flex flex-col w-72 min-w-72 self-start">
+    <div className="flex flex-col w-full md:w-72 md:min-w-72 md:self-start">
       <div className="flex items-center gap-2 mb-3 px-1">
         <span className={clsx('w-2 h-2 rounded-full shrink-0', meta.dot)} />
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>

@@ -82,7 +82,7 @@ export function TaskCardDisplay({ task, isDragging, isOverlay, onHold }) {
           <button
             onClick={e => { e.stopPropagation(); onHold() }}
             title={isOnHold ? 'Resume task' : 'Put on hold'}
-            className="shrink-0 mt-0.5 w-6 h-6 flex items-center justify-center rounded text-gray-300 dark:text-gray-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-all duration-150 text-sm opacity-0 group-hover:opacity-100"
+            className="shrink-0 mt-0.5 w-6 h-6 flex items-center justify-center rounded text-gray-300 dark:text-gray-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-all duration-150 text-sm md:opacity-0 md:group-hover:opacity-100"
           >{isOnHold ? '▶' : '⏸'}</button>
         )}
       </div>

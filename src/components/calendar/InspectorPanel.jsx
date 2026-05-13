@@ -43,6 +43,8 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
   })
   const [subtasks, setSubtasks]         = useState([])
   const [newSubtask, setNewSubtask]     = useState('')
+  const [editingSubtaskId, setEditingSubtaskId] = useState(null)
+  const [editSubtaskTitle, setEditSubtaskTitle] = useState('')
   const [selectedTagIds, setSelectedTagIds] = useState(
     new Set(
       task.tags?.map(t => t.id) ||
@@ -153,6 +155,19 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
   async function deleteSubtask(id) {
     await supabase.from('subtasks').delete().eq('id', id)
     setSubtasks(p => p.filter(s => s.id !== id))
+  }
+
+  function startEditSubtask(sub) {
+    setEditingSubtaskId(sub.id)
+    setEditSubtaskTitle(sub.title)
+  }
+
+  async function commitEditSubtask(id) {
+    const title = editSubtaskTitle.trim()
+    setEditingSubtaskId(null)
+    if (!title) return
+    await supabase.from('subtasks').update({ title }).eq('id', id)
+    setSubtasks(p => p.map(s => s.id === id ? { ...s, title } : s))
   }
 
   async function markComplete() {
@@ -324,14 +339,34 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
                 >
                   {sub.is_done && <span className="text-[9px] leading-none font-bold">✓</span>}
                 </button>
-                <span className={clsx(
-                  'flex-1 text-xs text-gray-700 dark:text-gray-300',
-                  sub.is_done && 'opacity-40 line-through',
-                )}>{sub.title}</span>
+                {editingSubtaskId === sub.id ? (
+                  <input
+                    autoFocus
+                    value={editSubtaskTitle}
+                    onChange={e => setEditSubtaskTitle(e.target.value)}
+                    onBlur={() => commitEditSubtask(sub.id)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); commitEditSubtask(sub.id) }
+                      if (e.key === 'Escape') setEditingSubtaskId(null)
+                    }}
+                    className="flex-1 text-xs bg-transparent outline-none border-b border-purple-400 text-gray-900 dark:text-white"
+                  />
+                ) : (
+                  <span className={clsx(
+                    'flex-1 text-xs text-gray-700 dark:text-gray-300',
+                    sub.is_done && 'opacity-40',
+                  )}>{sub.title}</span>
+                )}
+                {editingSubtaskId !== sub.id && (
+                  <button
+                    onClick={() => startEditSubtask(sub)}
+                    className="shrink-0 px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 active:scale-95 transition-all md:opacity-0 md:group-hover:opacity-100"
+                  >Rename</button>
+                )}
                 <button
                   onClick={() => deleteSubtask(sub.id)}
-                  className="text-gray-300 dark:text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all text-xs"
-                >✕</button>
+                  className="shrink-0 px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-95 transition-all md:opacity-0 md:group-hover:opacity-100"
+                >Delete</button>
               </div>
             ))}
             <div className="flex items-center gap-2 mt-1">
