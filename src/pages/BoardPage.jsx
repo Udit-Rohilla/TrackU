@@ -8,7 +8,7 @@ import { arrayMove } from '@dnd-kit/sortable'
 import clsx from 'clsx'
 import { supabase } from '../lib/supabase'
 import { computeTimeLogged } from '../lib/time'
-import { sendNtfyNotification, getDeadlinePendingTasks, getOverduePendingTasks } from '../lib/notifications'
+import { sendNtfyNotification, getDeadlinePendingTasks, getOverduePendingTasks, getHourlyOverdueTasks, markHourlyOverdueNotified, pruneOverdueTimestamps } from '../lib/notifications'
 import KanbanColumn from '../components/board/KanbanColumn'
 import { TaskCardDisplay } from '../components/board/TaskCard'
 import TaskModal from '../components/tasks/TaskModal'
@@ -119,7 +119,16 @@ export default function BoardPage({ session }) {
         if (ok) {
           await supabase.from('tasks').update({ deadline_overdue_notified: true }).eq('id', task.id)
           setTasks(prev => prev.map(t => t.id === task.id ? { ...t, deadline_overdue_notified: true } : t))
+          markHourlyOverdueNotified(task.id)
         }
+      }
+      pruneOverdueTimestamps(tasksRef.current)
+      for (const task of getHourlyOverdueTasks(tasksRef.current)) {
+        const overdueMs = Date.now() - new Date(task.deadline).getTime()
+        const h = Math.floor(overdueMs / 3_600_000)
+        const label = h >= 1 ? `${h}h overdue` : 'Just went overdue'
+        const ok = await sendNtfyNotification(ntfyTopic, `Still overdue: ${task.title}`, `${label} — mark it done or reschedule.`)
+        if (ok) markHourlyOverdueNotified(task.id)
       }
     }
     checkDeadlines()
