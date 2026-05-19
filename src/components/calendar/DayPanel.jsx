@@ -31,7 +31,7 @@ function CompactCard({ task, type, onClick }) {
       <p className={clsx(
         'text-sm font-medium leading-snug break-words',
         type === 'completed'
-          ? 'text-gray-400 dark:text-gray-500 line-through'
+          ? 'text-gray-400 dark:text-gray-500'
           : 'text-gray-800 dark:text-gray-200',
       )}>
         {task.title}

@@ -70,9 +70,11 @@ export default function BoardPage({ session }) {
   const tasksRef = useRef(tasks)
   const newTagInputRef = useRef(null)
 
+  const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor,   { activationConstraint: { delay: 500, tolerance: 10 } }),
+    ...( isTouchDevice ? [] : [
+      useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    ]),
   )
 
   const dropAnimation = {
@@ -293,11 +295,17 @@ export default function BoardPage({ session }) {
     return true
   })
 
+  const doneCutoff = new Date(Date.now() - 168 * 60 * 60 * 1000)
+
   const tasksByStatus = {
     not_started: sortTaskList(filteredTasks.filter(t => t.status === 'not_started')),
     in_progress: sortTaskList(filteredTasks.filter(t => t.status === 'in_progress' || t.status === 'on_hold')),
-    done:        sortTaskList(filteredTasks.filter(t => t.status === 'done')),
+    done:        sortTaskList(filteredTasks.filter(t =>
+      t.status === 'done' && t.updated_at && new Date(t.updated_at) >= doneCutoff
+    )),
   }
+
+  const visibleCount = tasksByStatus.not_started.length + tasksByStatus.in_progress.length + tasksByStatus.done.length
 
   function handleDragStart({ active }) {
     setActiveTask(tasks.find(t => t.id === active.id) ?? null)
@@ -485,7 +493,7 @@ export default function BoardPage({ session }) {
         <div className="flex items-center gap-2.5">
           <h1 className="text-sm font-semibold text-gray-900 dark:text-white">Board</h1>
           <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-medium">
-            {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+            {visibleCount} {visibleCount === 1 ? 'task' : 'tasks'}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -552,8 +560,13 @@ export default function BoardPage({ session }) {
                   : 'border-gray-200 text-gray-500 dark:border-gray-700 dark:text-gray-400 hover:border-gray-300 hover:text-gray-600 dark:hover:border-gray-600 dark:hover:text-gray-300',
               )}
             >
-              <span>↕</span>
-              <span>Sort{sortBy !== 'position' ? ` · ${SORT_OPTS.find(o => o.id === sortBy)?.label}` : ''}</span>
+              <svg className="shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="3" x2="8" y2="21" />
+                <polyline points="3 8 8 3 13 8" />
+                <line x1="16" y1="21" x2="16" y2="3" />
+                <polyline points="21 16 16 21 11 16" />
+              </svg>
+              <span className="hidden md:inline">Sort{sortBy !== 'position' ? ` · ${SORT_OPTS.find(o => o.id === sortBy)?.label}` : ''}</span>
             </button>
             {sortOpen && (
               <>
@@ -590,8 +603,10 @@ export default function BoardPage({ session }) {
                   : 'border-gray-200 text-gray-500 dark:border-gray-700 dark:text-gray-400 hover:border-gray-300 hover:text-gray-600 dark:hover:border-gray-600 dark:hover:text-gray-300',
               )}
             >
-              <span>⊟</span>
-              <span>Filter{priorityFilter !== 'all' ? ` · ${FILTER_OPTS.find(o => o.id === priorityFilter)?.label}` : ''}</span>
+              <svg className="shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 4h18l-7 8.5V20l-4-2v-5.5L3 4z" />
+              </svg>
+              <span className="hidden md:inline">Filter{priorityFilter !== 'all' ? ` · ${FILTER_OPTS.find(o => o.id === priorityFilter)?.label}` : ''}</span>
             </button>
             {filterOpen && (
               <>

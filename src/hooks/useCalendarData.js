@@ -33,23 +33,36 @@ export function getDayData(date, tasks) {
   const today   = startOfDay(new Date())
   const isPast  = startOfDay(date) < today
 
-  const cutoff = new Date(Date.now() - 168 * 60 * 60 * 1000)
-  const completed = tasks.filter(t =>
+  // Regular done tasks (non-recurring, or recurring manually set to done)
+  const recentDone = tasks.filter(t =>
+    !t._isHistory &&
     t.status === 'done' &&
     t.updated_at &&
-    format(new Date(t.updated_at), 'yyyy-MM-dd') === dateStr &&
-    new Date(t.updated_at) >= cutoff
+    format(new Date(t.updated_at), 'yyyy-MM-dd') === dateStr
   )
 
+  // Virtual history entries synthesized from recurring_history table
+  const historyDone = tasks.filter(t =>
+    t._isHistory &&
+    t.updated_at &&
+    format(new Date(t.updated_at), 'yyyy-MM-dd') === dateStr
+  )
+
+  const completed = [...recentDone, ...historyDone]
+
+  // Track real task IDs that already have a history completion on this date
+  // so they don't also show up in the recurring (scheduled) slot
+  const historyTaskIds = new Set(historyDone.map(t => t._sourceTaskId).filter(Boolean))
+
   const deadlines = tasks.filter(t =>
-    !t.archived && t.status !== 'done' &&
+    !t._isHistory && !t.archived && t.status !== 'done' &&
     t.deadline &&
     format(new Date(t.deadline), 'yyyy-MM-dd') === dateStr &&
     !isPast
   )
 
   const overdue = tasks.filter(t =>
-    !t.archived && t.status !== 'done' &&
+    !t._isHistory && !t.archived && t.status !== 'done' &&
     t.deadline &&
     format(new Date(t.deadline), 'yyyy-MM-dd') === dateStr &&
     isPast
@@ -62,8 +75,10 @@ export function getDayData(date, tasks) {
   ])
 
   const recurring = tasks.filter(t =>
+    !t._isHistory &&
     t.is_recurring && !t.archived &&
     !excludeIds.has(t.id) &&
+    !historyTaskIds.has(t.id) &&
     isRecurringOnDate(t, date)
   )
 
@@ -78,22 +93,50 @@ export function useCalendarData(session) {
   useEffect(() => { fetchAll() }, [])
 
   async function fetchAll() {
-    const [{ data: taskData }, { data: tagData }] = await Promise.all([
+    const [{ data: taskData }, { data: tagData }, { data: histData }] = await Promise.all([
       supabase
         .from('tasks')
         .select('*, task_tags(tags(id, name, color)), subtasks(id, is_done)')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: true }),
       supabase.from('tags').select('*').order('name'),
+      supabase
+        .from('recurring_history')
+        .select('*, tasks(id, title, is_recurring, recurrence_type, recurrence_config, archived)')
+        .eq('user_id', session.user.id)
+        .eq('was_completed', true)
+        .order('completed_at', { ascending: false }),
     ])
-    setTasks(normalizeTasks(taskData || []))
+
+    const normalizedTasks = normalizeTasks(taskData || [])
+
+    // Synthesize a virtual "done" task for every recurring_history completion.
+    // These carry _isHistory=true so getDayData can distinguish them from real tasks,
+    // and _sourceTaskId so the parent task isn't also shown as "scheduled" on the same day.
+    const historyVirtual = (histData || []).map(h => ({
+      id:            `hist_${h.id}`,
+      title:         h.tasks?.title || 'Recurring task',
+      status:        'done',
+      updated_at:    h.completed_at,
+      is_recurring:  true,
+      archived:      false,
+      tags:          [],
+      deadline:      null,
+      _isHistory:    true,
+      _sourceTaskId: h.task_id,
+    }))
+
+    setTasks([...normalizedTasks, ...historyVirtual])
     setAllTags(tagData || [])
     setLoading(false)
   }
 
   function handleTaskUpdate(updatedRaw) {
     const [normalized] = normalizeTasks([updatedRaw])
-    setTasks(prev => prev.map(t => t.id === normalized.id ? { ...t, ...normalized } : t))
+    // Only update real tasks; leave virtual history entries untouched
+    setTasks(prev => prev.map(t =>
+      !t._isHistory && t.id === normalized.id ? { ...t, ...normalized } : t
+    ))
   }
 
   return { tasks, allTags, loading, handleTaskUpdate }
