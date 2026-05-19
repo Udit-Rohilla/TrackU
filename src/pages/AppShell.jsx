@@ -1,23 +1,13 @@
-import { lazy, Suspense } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
 import {
   LayoutGrid, Sun, Repeat2, BarChart2, CalendarDays, Settings, Check,
 } from 'lucide-react'
-
-const BoardPage     = lazy(() => import('./BoardPage'))
-const RecurringPage = lazy(() => import('./RecurringPage'))
-const TodayPage     = lazy(() => import('./TodayPage'))
-const DashboardPage = lazy(() => import('./DashboardPage'))
-const CalendarPage  = lazy(() => import('./CalendarPage'))
-const SettingsPage  = lazy(() => import('./SettingsPage'))
-
-function PageLoader() {
-  return (
-    <div className="flex-1 flex items-center justify-center h-full text-sm text-gray-400">
-      Loading…
-    </div>
-  )
-}
+import BoardPage from './BoardPage'
+import RecurringPage from './RecurringPage'
+import TodayPage from './TodayPage'
+import DashboardPage from './DashboardPage'
+import CalendarPage from './CalendarPage'
+import SettingsPage from './SettingsPage'
 
 const navItems = [
   { to: '/',          label: 'Board',     icon: LayoutGrid   },
@@ -116,7 +106,6 @@ export default function AppShell({ session }) {
       </aside>
 
       <main className="flex-1 overflow-hidden flex flex-col bg-white dark:bg-gray-950 pb-nav-safe">
-        <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<BoardPage session={session} />} />
             <Route path="/today" element={<TodayPage session={session} />} />
@@ -125,7 +114,6 @@ export default function AppShell({ session }) {
             <Route path="/calendar" element={<CalendarPage session={session} />} />
             <Route path="/settings" element={<SettingsPage session={session} />} />
           </Routes>
-        </Suspense>
       </main>
 
       {/* Mobile bottom nav */}

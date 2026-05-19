@@ -1,9 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
-
-const AuthPage = lazy(() => import('./pages/AuthPage'))
-const AppShell = lazy(() => import('./pages/AppShell'))
+import AuthPage from './pages/AuthPage'
+import AppShell from './pages/AppShell'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
@@ -25,15 +24,9 @@ export default function App() {
   )
 
   return (
-    <Suspense fallback={
-      <div className="h-screen flex items-center justify-center text-gray-400 text-sm">
-        Loading…
-      </div>
-    }>
-      <Routes>
-        <Route path="/auth" element={!session ? <AuthPage /> : <Navigate to="/" />} />
-        <Route path="/*" element={session ? <AppShell session={session} /> : <Navigate to="/auth" />} />
-      </Routes>
-    </Suspense>
+    <Routes>
+      <Route path="/auth" element={!session ? <AuthPage /> : <Navigate to="/" />} />
+      <Route path="/*" element={session ? <AppShell session={session} /> : <Navigate to="/auth" />} />
+    </Routes>
   )
 }

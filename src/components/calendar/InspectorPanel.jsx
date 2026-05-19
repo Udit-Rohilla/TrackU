@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import clsx from 'clsx'
 import { supabase } from '../../lib/supabase'
 
@@ -51,14 +51,21 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
       (task.task_tags || []).map(tt => tt.tags?.id).filter(Boolean)
     )
   )
-  const [saving, setSaving]       = useState(false)
-  const [archiving, setArchiving] = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [archiving, setArchiving]   = useState(false)
   const [completing, setCompleting] = useState(false)
   const [showTagPicker, setShowTagPicker] = useState(false)
+  const titleRef = useRef(null)
 
+  useEffect(() => { fetchSubtasks() }, [task.id])
+
+  // Auto-resize title textarea
   useEffect(() => {
-    fetchSubtasks()
-  }, [task.id])
+    if (titleRef.current) {
+      titleRef.current.style.height = 'auto'
+      titleRef.current.style.height = titleRef.current.scrollHeight + 'px'
+    }
+  }, [form.title])
 
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose() }
@@ -183,16 +190,18 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
   const unselectedTags = allTags.filter(t => !selectedTagIds.has(t.id))
 
   return (
-    <div className="w-80 min-w-80 border-l border-gray-100 dark:border-gray-800 flex flex-col bg-white dark:bg-gray-950 animate-slide-right overflow-hidden">
+    <div className="fixed inset-0 z-40 flex flex-col bg-white dark:bg-gray-950 md:static md:inset-auto md:z-auto md:w-80 md:min-w-80 md:border-l md:border-gray-100 md:dark:border-gray-800 md:animate-slide-right overflow-hidden">
 
       {/* Header */}
       <div className="flex items-start gap-3 px-4 py-3.5 border-b border-gray-100 dark:border-gray-800 shrink-0">
         <div className="flex-1 min-w-0">
-          <input
+          <textarea
+            ref={titleRef}
             value={form.title}
             onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
             onBlur={handleTitleBlur}
-            className="w-full text-sm font-semibold text-gray-900 dark:text-white bg-transparent outline-none border-b border-transparent focus:border-purple-400 transition-colors pb-0.5"
+            rows={1}
+            className="w-full text-sm font-semibold text-gray-900 dark:text-white bg-transparent outline-none border-b border-transparent focus:border-purple-400 transition-colors pb-0.5 resize-none overflow-hidden leading-snug"
             placeholder="Task title"
           />
           {saving && (
@@ -201,7 +210,7 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
         </div>
         <button
           onClick={onClose}
-          className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-xs shrink-0 mt-0.5"
+          className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-base md:text-xs shrink-0 mt-0.5"
         >✕</button>
       </div>
 
@@ -444,7 +453,7 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
       </div>
 
       {/* Footer CTA */}
-      <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 shrink-0">
+      <div className="px-4 pt-3 pb-24 md:pb-3 border-t border-gray-100 dark:border-gray-800 shrink-0">
         {isDone ? (
           <div className="flex items-center justify-center gap-2 py-2.5 text-sm text-green-600 dark:text-green-400 font-semibold">
             <span>✓</span> Task Completed
