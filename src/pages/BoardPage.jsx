@@ -395,11 +395,11 @@ export default function BoardPage({ session }) {
         : t.status === colId) && t.id !== active.id)
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
 
-    // Derive new position from indicator (handles "before first" correctly)
+    // Derive new position from indicator
     const computePos = colTasks => {
       if (indicator?.beforeId) {
         const idx = colTasks.findIndex(t => t.id === indicator.beforeId)
-        if (idx === 0) return Math.max(1, Math.round((colTasks[0].position ?? 1000) / 2))
+        if (idx === 0) return (colTasks[0].position ?? 0) - 1000
         if (idx > 0) {
           const a = colTasks[idx - 1].position ?? (idx * 1000)
           const b = colTasks[idx].position     ?? ((idx + 1) * 1000)
@@ -457,11 +457,12 @@ export default function BoardPage({ session }) {
       return
     }
 
-    // Same-column reorder
+    // Same-column reorder — sort fullCol by position so indices match rendered order
     if (!overIsColumn) {
-      const fullCol = targetColId === 'in_progress'
+      const fullCol = [...(targetColId === 'in_progress'
         ? tasks.filter(t => t.status === 'in_progress' || t.status === 'on_hold')
-        : tasks.filter(t => t.status === targetColId)
+        : tasks.filter(t => t.status === targetColId))
+      ].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
 
       const oldIdx = fullCol.findIndex(t => t.id === active.id)
       let newIdx   = fullCol.length - 1
@@ -471,21 +472,21 @@ export default function BoardPage({ session }) {
       }
 
       if (oldIdx !== -1 && newIdx !== -1 && oldIdx !== newIdx) {
-        const reordered = arrayMove(fullCol, oldIdx, newIdx)
+        const reordered    = arrayMove(fullCol, oldIdx, newIdx)
+        const posUpdates   = reordered.map((t, i) => ({ id: t.id, position: (i + 1) * 1000 }))
+        const withNewPos   = reordered.map((t, i) => ({ ...t, position: (i + 1) * 1000 }))
+
+        // Apply positions immediately — no second setState needed
         setTasks(prev => [
           ...(targetColId === 'in_progress'
             ? prev.filter(t => t.status !== 'in_progress' && t.status !== 'on_hold')
             : prev.filter(t => t.status !== targetColId)),
-          ...reordered,
+          ...withNewPos,
         ])
-        const posUpdates = reordered.map((t, i) => ({ id: t.id, position: (i + 1) * 1000 }))
+
         await Promise.all(posUpdates.map(({ id, position }) =>
           supabase.from('tasks').update({ position }).eq('id', id)
         ))
-        setTasks(prev => prev.map(t => {
-          const p = posUpdates.find(u => u.id === t.id)
-          return p ? { ...t, position: p.position } : t
-        }))
       }
     }
   }
