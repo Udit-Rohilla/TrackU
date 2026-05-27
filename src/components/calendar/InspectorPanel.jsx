@@ -55,7 +55,8 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
   const [archiving, setArchiving]   = useState(false)
   const [completing, setCompleting] = useState(false)
   const [showTagPicker, setShowTagPicker] = useState(false)
-  const titleRef = useRef(null)
+  const titleRef  = useRef(null)
+  const scrollRef = useRef(null)
 
   useEffect(() => { fetchSubtasks() }, [task.id])
 
@@ -71,6 +72,16 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
     const onKey = e => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Prevent background scroll on mobile (iOS Safari ignores overflow:hidden on body)
+  useEffect(() => {
+    const prevent = e => {
+      if (scrollRef.current && scrollRef.current.contains(e.target)) return
+      e.preventDefault()
+    }
+    document.addEventListener('touchmove', prevent, { passive: false })
+    return () => document.removeEventListener('touchmove', prevent)
   }, [])
 
   useEffect(() => {
@@ -210,12 +221,12 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
         </div>
         <button
           onClick={onClose}
-          className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-base md:text-xs shrink-0 mt-0.5"
+          className="w-11 h-11 md:w-7 md:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-lg md:text-xs shrink-0 mt-0.5"
         >✕</button>
       </div>
 
       {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+      <div ref={scrollRef} className="flex-1 overflow-y-scroll overscroll-contain px-4 py-4 space-y-5" style={{ WebkitOverflowScrolling: 'touch' }}>
 
         {/* Tags */}
         <div>

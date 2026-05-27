@@ -11,7 +11,7 @@ const PRIORITY_STYLES = {
 }
 
 function getUrgency(task) {
-  if (task.status === 'done' || task.status === 'on_hold' || !task.deadline) return null
+  if (task.status === 'done' || !task.deadline) return null
   const diff = new Date(task.deadline) - Date.now()
   if (diff < 0) return 'overdue'
   if (diff < 2 * 60 * 60 * 1000) return 'urgent'
