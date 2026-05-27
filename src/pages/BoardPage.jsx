@@ -204,8 +204,8 @@ export default function BoardPage({ session }) {
 
   async function handleAddTask(status, title, tagIds = []) {
     const colTasks = tasks.filter(t => t.status === status)
-    const maxPos   = colTasks.length ? Math.max(...colTasks.map(t => t.position ?? 0)) : 0
-    const position = maxPos + 1000
+    const minPos   = colTasks.length ? Math.min(...colTasks.map(t => t.position ?? 0)) : 0
+    const position = minPos - 1000
     const timerUpdate = status === 'in_progress' ? { timer_started_at: new Date().toISOString() } : {}
     const { data } = await supabase
       .from('tasks')
@@ -275,7 +275,7 @@ export default function BoardPage({ session }) {
   }
 
   function sortTaskList(list) {
-    if (sortBy === 'position') return list
+    if (sortBy === 'position') return [...list].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     return [...list].sort((a, b) => {
       switch (sortBy) {
         case 'priority':        return (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4)
