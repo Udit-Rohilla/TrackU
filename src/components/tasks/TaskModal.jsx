@@ -54,6 +54,9 @@ const [selectedTagIds, setSelectedTagIds] = useState(
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [showTagPicker, setShowTagPicker]   = useState(false)
   const titleRef = useRef(null)
+  const scrollRef = useRef(null)
+  const panelRef  = useRef(null)
+  const drag      = useRef({ active: false, startY: 0, deltaY: 0 })
 
   useEffect(() => {
     fetchSubtasks()
@@ -61,6 +64,40 @@ const [selectedTagIds, setSelectedTagIds] = useState(
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // Prevent background page scroll on iOS while modal is open
+  useEffect(() => {
+    const prevent = e => {
+      if (scrollRef.current && scrollRef.current.contains(e.target)) return
+      e.preventDefault()
+    }
+    document.addEventListener('touchmove', prevent, { passive: false })
+    return () => document.removeEventListener('touchmove', prevent)
+  }, [])
+
+  function onDragStart(e) {
+    drag.current = { active: true, startY: e.touches[0].clientY, deltaY: 0 }
+  }
+  function onDragMove(e) {
+    if (!drag.current.active) return
+    const dy = e.touches[0].clientY - drag.current.startY
+    if (dy <= 0) return
+    drag.current.deltaY = dy
+    if (panelRef.current) panelRef.current.style.transform = `translateY(${dy}px)`
+  }
+  function onDragEnd() {
+    if (!drag.current.active) return
+    drag.current.active = false
+    if (drag.current.deltaY > 100) {
+      onClose()
+    } else {
+      if (panelRef.current) {
+        panelRef.current.style.transition = 'transform 0.25s ease-out'
+        panelRef.current.style.transform = 'translateY(0)'
+        setTimeout(() => { if (panelRef.current) panelRef.current.style.transition = '' }, 250)
+      }
+    }
+  }
 
   useEffect(() => {
     const el = titleRef.current
@@ -183,17 +220,31 @@ const [selectedTagIds, setSelectedTagIds] = useState(
       <div className="fixed inset-0 bg-black/40 dark:bg-black/60 z-40 animate-fade-in" onClick={onClose} />
 
       <div className="fixed inset-0 z-50 flex flex-col justify-end md:items-center md:justify-center pointer-events-none">
-        <div className={clsx(
-          'pointer-events-auto bg-white dark:bg-gray-900 shadow-2xl overflow-y-auto w-full',
-          'rounded-t-2xl max-h-[92vh]',
-          'md:rounded-2xl md:w-[800px] md:max-h-[88vh]',
-          'animate-slide-up md:animate-scale-in',
-        )}>
-          {/* Mobile drag handle */}
-          <div className="md:hidden flex justify-center pt-3 pb-1">
-            <div className="w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-700" />
+        <div
+          ref={panelRef}
+          className={clsx(
+            'pointer-events-auto bg-white dark:bg-gray-900 shadow-2xl w-full flex flex-col',
+            'rounded-t-2xl max-h-[92vh]',
+            'md:rounded-2xl md:w-[800px] md:max-h-[88vh]',
+            'animate-slide-up md:animate-scale-in',
+          )}
+        >
+          {/* Mobile drag handle — touch here to swipe-down-to-close */}
+          <div
+            className="md:hidden flex justify-center pt-3 pb-1 shrink-0 cursor-grab"
+            onTouchStart={onDragStart}
+            onTouchMove={onDragMove}
+            onTouchEnd={onDragEnd}
+          >
+            <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
           </div>
 
+          {/* Scrollable content — min-h-0 is required for iOS flex scroll */}
+          <div
+            ref={scrollRef}
+            className="flex-1 min-h-0 overflow-y-scroll overscroll-contain"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
           <div className="px-6 pt-5 pb-6">
 
             {/* Title row */}
@@ -212,7 +263,7 @@ const [selectedTagIds, setSelectedTagIds] = useState(
                 {saving && <span className="text-xs text-gray-400 animate-fade-in">Saving…</span>}
                 <button
                   onClick={onClose}
-                  className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all active:scale-90"
+                  className="w-11 h-11 md:w-7 md:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all active:scale-90 text-xl md:text-sm"
                 >✕</button>
               </div>
             </div>
@@ -578,6 +629,7 @@ const [selectedTagIds, setSelectedTagIds] = useState(
             </div>
 
           </div>
+          </div>{/* end scrollable area */}
         </div>
       </div>
     </>
