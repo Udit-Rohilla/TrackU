@@ -204,7 +204,10 @@ export default function BoardPage({ session }) {
   }
 
   async function handleAddTask(status, title, tagIds = []) {
-    const colTasks = tasks.filter(t => t.status === status)
+    // Include on_hold tasks when computing min position for the in_progress column
+    const colTasks = status === 'in_progress'
+      ? tasks.filter(t => t.status === 'in_progress' || t.status === 'on_hold')
+      : tasks.filter(t => t.status === status)
     const minPos   = colTasks.length ? Math.min(...colTasks.map(t => t.position ?? 0)) : 0
     const position = minPos - 1000
     const timerUpdate = status === 'in_progress' ? { timer_started_at: new Date().toISOString() } : {}
@@ -217,9 +220,9 @@ export default function BoardPage({ session }) {
     if (tagIds.length > 0) {
       await supabase.from('task_tags').insert(tagIds.map(tag_id => ({ task_id: data.id, tag_id })))
       const { data: fresh } = await supabase.from('tasks').select('*, task_tags(tags(id, name, color)), subtasks(id, is_done)').eq('id', data.id).single()
-      if (fresh) { setTasks(prev => [...prev, ...normalizeTasks([fresh])]); return }
+      if (fresh) { setTasks(prev => [normalizeTasks([fresh])[0], ...prev]); return }
     }
-    setTasks(prev => [...prev, ...normalizeTasks([data])])
+    setTasks(prev => [normalizeTasks([data])[0], ...prev])
   }
 
   function handleFilterChange(id) {
