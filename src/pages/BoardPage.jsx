@@ -67,7 +67,8 @@ export default function BoardPage({ session }) {
   const [loading, setLoading]           = useState(true)
   const [ntfyTopic, setNtfyTopic]       = useState('')
   const [newTag, setNewTag]             = useState(null)
-  const tasksRef = useRef(tasks)
+  const tasksRef       = useRef(tasks)
+  const indicatorRef   = useRef(null)
   const newTagInputRef = useRef(null)
 
   const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
@@ -320,8 +321,13 @@ export default function BoardPage({ session }) {
     setActiveTask(tasks.find(t => t.id === active.id) ?? null)
   }
 
+  function setIndicator(val) {
+    setDropIndicator(val)
+    indicatorRef.current = val
+  }
+
   function handleDragOver({ active, over }) {
-    if (!over) { setDropIndicator(null); return }
+    if (!over) { setIndicator(null); return }
 
     const activeRect = active.rect.current.translated
     const overRect   = over.rect
@@ -335,15 +341,14 @@ export default function BoardPage({ session }) {
           : t.status === colId) && t.id !== active.id)
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
 
-      // If hovering in the top half of the column and there are tasks, snap to before first
       if (colTasks.length > 0 && activeMidY !== null && overRect) {
         const colMidY = overRect.top + overRect.height / 2
         if (activeMidY < colMidY) {
-          setDropIndicator({ colId, beforeId: colTasks[0].id })
+          setIndicator({ colId, beforeId: colTasks[0].id })
           return
         }
       }
-      setDropIndicator({ colId, atEnd: true })
+      setIndicator({ colId, atEnd: true })
       return
     }
 
@@ -355,7 +360,7 @@ export default function BoardPage({ session }) {
 
     const before = activeMidY < (overRect.top + overRect.height / 2)
     if (before) {
-      setDropIndicator({ colId, beforeId: over.id })
+      setIndicator({ colId, beforeId: over.id })
     } else {
       const col = tasks
         .filter(t => colId === 'in_progress'
@@ -364,17 +369,17 @@ export default function BoardPage({ session }) {
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
       const next = col[col.findIndex(t => t.id === over.id) + 1]
       if (next && next.id !== active.id) {
-        setDropIndicator({ colId, beforeId: next.id })
+        setIndicator({ colId, beforeId: next.id })
       } else {
-        setDropIndicator({ colId, atEnd: true })
+        setIndicator({ colId, atEnd: true })
       }
     }
   }
 
   async function handleDragEnd({ active, over }) {
-    const indicator = dropIndicator
+    const indicator = indicatorRef.current   // ref always has latest value
     setActiveTask(null)
-    setDropIndicator(null)
+    setIndicator(null)
     if (!over || active.id === over.id) return
 
     const dragged = tasks.find(t => t.id === active.id)
@@ -457,8 +462,8 @@ export default function BoardPage({ session }) {
       return
     }
 
-    // Same-column reorder — sort fullCol by position so indices match rendered order
-    if (!overIsColumn) {
+    // Same-column reorder — runs whether over is a task or the column droppable area
+    if (!isCrossColumn) {
       const fullCol = [...(targetColId === 'in_progress'
         ? tasks.filter(t => t.status === 'in_progress' || t.status === 'on_hold')
         : tasks.filter(t => t.status === targetColId))
@@ -652,7 +657,7 @@ export default function BoardPage({ session }) {
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
-        onDragCancel={() => { setActiveTask(null); setDropIndicator(null) }}
+        onDragCancel={() => { setActiveTask(null); setIndicator(null) }}
       >
         <div
           key={filterKey}

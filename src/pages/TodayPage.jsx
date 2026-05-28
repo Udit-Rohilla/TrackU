@@ -110,9 +110,12 @@ export default function TodayPage({ session }) {
   async function handleAddTask() {
     const title = newTitle.trim()
     if (!title) { setAddingTask(false); return }
+    const colTasks = tasks.filter(t => t.status === 'not_started')
+    const minPos   = colTasks.length ? Math.min(...colTasks.map(t => t.position ?? 0)) : 0
+    const position = minPos - 1000
     const { data } = await supabase
       .from('tasks')
-      .insert({ user_id: session.user.id, title, status: 'not_started', deadline: endOfDay(new Date()).toISOString() })
+      .insert({ user_id: session.user.id, title, status: 'not_started', position, deadline: endOfDay(new Date()).toISOString() })
       .select('*, task_tags(tags(id, name, color)), subtasks(id, is_done)')
       .single()
     if (data) setTasks(prev => [...prev, ...normalizeTasks([data])])
