@@ -223,7 +223,7 @@ const [selectedTagIds, setSelectedTagIds] = useState(
         <div
           ref={panelRef}
           className={clsx(
-            'pointer-events-auto bg-white dark:bg-gray-900 shadow-2xl w-full flex flex-col',
+            'pointer-events-auto bg-white dark:bg-gray-900 shadow-2xl w-full flex flex-col overflow-hidden',
             'rounded-t-2xl max-h-[92vh]',
             'md:rounded-2xl md:w-[800px] md:max-h-[88vh]',
             'animate-slide-up md:animate-scale-in',
@@ -610,24 +610,24 @@ const [selectedTagIds, setSelectedTagIds] = useState(
                 </div>
 
               </div>
-            </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-100 dark:border-gray-800">
-              <button
-                onClick={async () => {
-                  setArchiving(true)
-                  await supabase.from('tasks').update({ archived: true }).eq('id', task.id)
-                  onArchive(task.id)
-                }}
-                disabled={archiving}
-                className="flex items-center gap-1.5 text-sm text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 font-medium transition-colors disabled:opacity-40"
-              >
-                <span>🗑</span>
-                {archiving ? 'Archiving…' : 'Delete Task'}
-              </button>
-            </div>
+              {/* Delete Task */}
+              <div className="pt-2 pb-24">
+                <button
+                  onClick={async () => {
+                    setArchiving(true)
+                    await supabase.from('tasks').update({ archived: true }).eq('id', task.id)
+                    onArchive(task.id)
+                  }}
+                  disabled={archiving}
+                  className="flex items-center gap-1.5 text-sm text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 font-medium transition-colors disabled:opacity-40"
+                >
+                  <span>🗑</span>
+                  {archiving ? 'Archiving…' : 'Delete Task'}
+                </button>
+              </div>
 
+            </div>
           </div>
           </div>{/* end scrollable area */}
         </div>
