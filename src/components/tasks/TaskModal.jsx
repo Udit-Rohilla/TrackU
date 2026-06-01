@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import clsx from 'clsx'
 import { supabase } from '../../lib/supabase'
+import {
+  DndContext, PointerSensor, TouchSensor,
+  useSensor, useSensors, closestCenter,
+} from '@dnd-kit/core'
+import {
+  SortableContext, useSortable,
+  verticalListSortingStrategy, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low']
 const PRIORITY_CONFIG = {
@@ -203,6 +212,18 @@ const [selectedTagIds, setSelectedTagIds] = useState(
     setEditSubtaskTitle(sub.title)
   }
 
+  async function handleSubtaskDragEnd(event) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIdx = subtasks.findIndex(s => s.id === active.id)
+    const newIdx = subtasks.findIndex(s => s.id === over.id)
+    const reordered = arrayMove(subtasks, oldIdx, newIdx)
+    setSubtasks(reordered)
+    await Promise.all(
+      reordered.map((s, i) => supabase.from('subtasks').update({ position: i }).eq('id', s.id))
+    )
+  }
+
   async function commitEditSubtask(id) {
     const title = editSubtaskTitle.trim()
     setEditingSubtaskId(null)
@@ -210,6 +231,11 @@ const [selectedTagIds, setSelectedTagIds] = useState(
     await supabase.from('subtasks').update({ title }).eq('id', id)
     setSubtasks(p => p.map(s => s.id === id ? { ...s, title } : s))
   }
+
+  const subSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 150, tolerance: 5 } }),
+  )
 
   const selectedStatus  = STATUSES.find(s => s.id === form.status) || STATUSES[0]
   const doneSubs        = subtasks.filter(s => s.is_done).length
@@ -427,50 +453,26 @@ const [selectedTagIds, setSelectedTagIds] = useState(
                       </div>
                     )}
                   </div>
-                  <div className="space-y-2">
-                    {subtasks.map(sub => (
-                      <div key={sub.id} className="flex items-center gap-2.5 group">
-                        <button
-                          onClick={() => toggleSubtask(sub)}
-                          className={clsx(
-                            'w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-all active:scale-90',
-                            sub.is_done
-                              ? 'bg-purple-600 border-purple-600 text-white'
-                              : 'border-gray-300 dark:border-gray-600 hover:border-purple-400',
-                          )}
-                        >
-                          {sub.is_done && <span className="text-[10px] leading-none font-bold">✓</span>}
-                        </button>
-                        {editingSubtaskId === sub.id ? (
-                          <input
-                            autoFocus
-                            value={editSubtaskTitle}
-                            onChange={e => setEditSubtaskTitle(e.target.value)}
-                            onBlur={() => commitEditSubtask(sub.id)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') { e.preventDefault(); commitEditSubtask(sub.id) }
-                              if (e.key === 'Escape') setEditingSubtaskId(null)
-                            }}
-                            className="flex-1 text-sm bg-transparent outline-none border-b border-purple-400 text-gray-900 dark:text-white"
+                  <DndContext sensors={subSensors} collisionDetection={closestCenter} onDragEnd={handleSubtaskDragEnd}>
+                    <SortableContext items={subtasks.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                      <div className="space-y-2">
+                        {subtasks.map(sub => (
+                          <SortableSubtaskRow
+                            key={sub.id}
+                            sub={sub}
+                            isEditing={editingSubtaskId === sub.id}
+                            editTitle={editSubtaskTitle}
+                            onEditTitleChange={setEditSubtaskTitle}
+                            onToggle={() => toggleSubtask(sub)}
+                            onStartEdit={() => startEditSubtask(sub)}
+                            onCommitEdit={() => commitEditSubtask(sub.id)}
+                            onCancelEdit={() => setEditingSubtaskId(null)}
+                            onDelete={() => deleteSubtask(sub.id)}
                           />
-                        ) : (
-                          <span className={clsx(
-                            'flex-1 text-sm text-gray-700 dark:text-gray-300',
-                            sub.is_done && 'opacity-40',
-                          )}>{sub.title}</span>
-                        )}
-                        {editingSubtaskId !== sub.id && (
-                          <button
-                            onClick={() => startEditSubtask(sub)}
-                            className="shrink-0 px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 active:scale-95 transition-all md:opacity-0 md:group-hover:opacity-100"
-                          >Rename</button>
-                        )}
-                        <button
-                          onClick={() => deleteSubtask(sub.id)}
-                          className="shrink-0 px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-95 transition-all md:opacity-0 md:group-hover:opacity-100"
-                        >Delete</button>
+                        ))}
                       </div>
-                    ))}
+                    </SortableContext>
+                  </DndContext>
 
                     <div className="flex items-center gap-2 mt-1">
                       <div className="w-4 h-4 rounded border-2 border-dashed border-gray-200 dark:border-gray-700 shrink-0" />
@@ -485,7 +487,6 @@ const [selectedTagIds, setSelectedTagIds] = useState(
                         className="flex-1 text-sm bg-transparent outline-none text-purple-600 dark:text-purple-400 placeholder-purple-400 dark:placeholder-purple-600 font-medium"
                       />
                     </div>
-                  </div>
                 </div>
 
                 {/* Notes */}
@@ -641,5 +642,60 @@ function Label({ children }) {
     <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
       {children}
     </p>
+  )
+}
+
+function SortableSubtaskRow({ sub, isEditing, editTitle, onEditTitleChange, onToggle, onStartEdit, onCommitEdit, onCancelEdit, onDelete }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sub.id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={clsx('flex items-center gap-2.5 group', isDragging && 'opacity-40')}
+    >
+      {/* Drag handle */}
+      <span
+        {...attributes}
+        {...listeners}
+        className="shrink-0 text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing touch-none text-xs leading-none select-none"
+        title="Drag to reorder"
+      >⠿</span>
+      <button
+        onClick={onToggle}
+        className={clsx(
+          'w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-all active:scale-90',
+          sub.is_done ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-300 dark:border-gray-600 hover:border-purple-400',
+        )}
+      >
+        {sub.is_done && <span className="text-[10px] leading-none font-bold">✓</span>}
+      </button>
+      {isEditing ? (
+        <input
+          autoFocus
+          value={editTitle}
+          onChange={e => onEditTitleChange(e.target.value)}
+          onBlur={onCommitEdit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); onCommitEdit() }
+            if (e.key === 'Escape') onCancelEdit()
+          }}
+          className="flex-1 text-sm bg-transparent outline-none border-b border-purple-400 text-gray-900 dark:text-white"
+        />
+      ) : (
+        <span className={clsx('flex-1 text-sm text-gray-700 dark:text-gray-300', sub.is_done && 'opacity-40')}>
+          {sub.title}
+        </span>
+      )}
+      {!isEditing && (
+        <button
+          onClick={onStartEdit}
+          className="shrink-0 px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 active:scale-95 transition-all md:opacity-0 md:group-hover:opacity-100"
+        >Rename</button>
+      )}
+      <button
+        onClick={onDelete}
+        className="shrink-0 px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-95 transition-all md:opacity-0 md:group-hover:opacity-100"
+      >Delete</button>
+    </div>
   )
 }

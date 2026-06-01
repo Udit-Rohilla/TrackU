@@ -118,7 +118,7 @@ export default function TodayPage({ session }) {
       .insert({ user_id: session.user.id, title, status: 'not_started', position, deadline: endOfDay(new Date()).toISOString() })
       .select('*, task_tags(tags(id, name, color)), subtasks(id, is_done)')
       .single()
-    if (data) setTasks(prev => [...prev, ...normalizeTasks([data])])
+    if (data) setTasks(prev => [normalizeTasks([data])[0], ...prev])
     setNewTitle('')
     setAddingTask(false)
   }
