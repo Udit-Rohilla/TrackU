@@ -55,10 +55,21 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
   const [archiving, setArchiving]   = useState(false)
   const [completing, setCompleting] = useState(false)
   const [showTagPicker, setShowTagPicker] = useState(false)
-  const titleRef  = useRef(null)
-  const scrollRef = useRef(null)
-  const panelRef  = useRef(null)
-  const drag      = useRef({ active: false, startY: 0, deltaY: 0 })
+  const titleRef   = useRef(null)
+  const scrollRef  = useRef(null)
+  const panelRef   = useRef(null)
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+
+  function closeWithAnimation() {
+    const panel = panelRef.current
+    if (!panel) { onClose(); return }
+    panel.style.animation = 'none'
+    panel.getBoundingClientRect()  // force reflow so browser commits translateY(0) before transition starts
+    panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
+    panel.style.transform  = 'translateY(110%)'
+    setTimeout(onClose, 240)
+  }
 
   useEffect(() => { fetchSubtasks() }, [task.id])
 
@@ -71,16 +82,15 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
   }, [form.title])
 
   useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') onClose() }
+    const onKey = e => { if (e.key === 'Escape') closeWithAnimation() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Prevent background scroll on mobile; allow when in a drag-to-close gesture
+  // Prevent background scroll on iOS for touches outside the panel
   useEffect(() => {
     const prevent = e => {
-      if (drag.current.active) { e.preventDefault(); return }
-      if (scrollRef.current && scrollRef.current.contains(e.target)) return
+      if (panelRef.current?.contains(e.target)) return
       e.preventDefault()
     }
     document.addEventListener('touchmove', prevent, { passive: false })
@@ -95,36 +105,58 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  function onDragStart(e) {
-    drag.current = { active: true, startY: e.touches[0].clientY, deltaY: 0 }
-  }
+  // Swipe-to-close: native listeners so we can call preventDefault on touchmove
+  useEffect(() => {
+    const panel  = panelRef.current
+    const scroll = scrollRef.current
+    if (!panel || !scroll) return
 
-  function onScrollAreaTouchStart(e) {
-    if (scrollRef.current && scrollRef.current.scrollTop > 0) return
-    drag.current = { active: true, startY: e.touches[0].clientY, deltaY: 0 }
-  }
+    let startY = 0, deltaY = 0, active = false
 
-  function onDragMove(e) {
-    if (!drag.current.active) return
-    const dy = e.touches[0].clientY - drag.current.startY
-    if (dy <= 0) { drag.current.active = false; return }
-    drag.current.deltaY = dy
-    if (panelRef.current) panelRef.current.style.transform = `translateY(${dy}px)`
-  }
-
-  function onDragEnd() {
-    if (!drag.current.active) return
-    drag.current.active = false
-    if (drag.current.deltaY > 60) {
-      onClose()
-    } else {
-      if (panelRef.current) {
-        panelRef.current.style.transition = 'transform 0.25s ease-out'
-        panelRef.current.style.transform = 'translateY(0)'
-        setTimeout(() => { if (panelRef.current) panelRef.current.style.transition = '' }, 250)
+    const onPanelStart = e => {
+      if (scroll.contains(e.target)) return
+      panel.style.animation = 'none'
+      startY = e.touches[0].clientY; deltaY = 0; active = true
+    }
+    const onScrollStart = e => {
+      if (scroll.scrollTop > 0) return
+      panel.style.animation = 'none'
+      startY = e.touches[0].clientY; deltaY = 0; active = true
+    }
+    const onMove = e => {
+      if (!active) return
+      const dy = e.touches[0].clientY - startY
+      if (dy <= 0) { active = false; return }
+      e.preventDefault()
+      deltaY = dy
+      panel.style.transform = `translateY(${dy}px)`
+    }
+    const onEnd = () => {
+      if (!active) return
+      active = false
+      if (deltaY > panel.offsetHeight * 0.25) {
+        panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
+        panel.style.transform  = 'translateY(110%)'
+        setTimeout(() => onCloseRef.current(), 240)
+      } else {
+        panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
+        panel.style.transform  = 'translateY(0)'
+        setTimeout(() => { panel.style.transition = ''; panel.style.animation = '' }, 270)
       }
     }
-  }
+
+    panel.addEventListener ('touchstart', onPanelStart,  { passive: true  })
+    scroll.addEventListener('touchstart', onScrollStart, { passive: true  })
+    panel.addEventListener ('touchmove',  onMove,        { passive: false })
+    panel.addEventListener ('touchend',   onEnd)
+
+    return () => {
+      panel.removeEventListener ('touchstart', onPanelStart)
+      scroll.removeEventListener('touchstart', onScrollStart)
+      panel.removeEventListener ('touchmove',  onMove)
+      panel.removeEventListener ('touchend',   onEnd)
+    }
+  }, [])
 
   async function fetchSubtasks() {
     const { data } = await supabase.from('subtasks').select('*').eq('task_id', task.id).order('position')
@@ -237,13 +269,8 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
   return (
     <div ref={panelRef} className="fixed inset-0 z-40 flex flex-col bg-white dark:bg-gray-950 md:static md:inset-auto md:z-auto md:w-80 md:min-w-80 md:border-l md:border-gray-100 md:dark:border-gray-800 md:animate-slide-right overflow-hidden">
 
-      {/* Drag handle — mobile pull-to-close */}
-      <div
-        className="md:hidden flex justify-center pt-3 pb-1 shrink-0 cursor-grab"
-        onTouchStart={onDragStart}
-        onTouchMove={onDragMove}
-        onTouchEnd={onDragEnd}
-      >
+      {/* Drag handle */}
+      <div className="md:hidden flex justify-center pt-3 pb-1 shrink-0">
         <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
       </div>
 
@@ -264,13 +291,13 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
           )}
         </div>
         <button
-          onClick={onClose}
+          onClick={closeWithAnimation}
           className="w-12 h-12 md:w-7 md:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-xl md:text-xs shrink-0"
         >✕</button>
       </div>
 
       {/* Scrollable body — min-h-0 is required on iOS for flex-1 scroll to work */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-scroll overscroll-contain px-4 py-4 space-y-5" style={{ WebkitOverflowScrolling: 'touch' }} onTouchStart={onScrollAreaTouchStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd}>
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-scroll overscroll-contain px-4 py-4 space-y-5" style={{ WebkitOverflowScrolling: 'touch' }}>
 
         {/* Tags */}
         <div>

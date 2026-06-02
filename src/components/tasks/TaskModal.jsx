@@ -62,57 +62,96 @@ const [selectedTagIds, setSelectedTagIds] = useState(
   const [archiving, setArchiving]           = useState(false)
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [showTagPicker, setShowTagPicker]   = useState(false)
-  const titleRef = useRef(null)
-  const scrollRef = useRef(null)
-  const panelRef  = useRef(null)
-  const drag      = useRef({ active: false, startY: 0, deltaY: 0 })
+  const titleRef   = useRef(null)
+  const scrollRef  = useRef(null)
+  const panelRef   = useRef(null)
+  const onCloseRef    = useRef(onClose)
+  const backdropRef   = useRef(null)
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+
+  function closeWithAnimation() {
+    const panel = panelRef.current
+    if (!panel) { onClose(); return }
+    panel.style.animation = 'none'
+    panel.getBoundingClientRect()  // force reflow so browser commits translateY(0) before transition starts
+    panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
+    panel.style.transform  = 'translateY(110%)'
+    if (backdropRef.current) {
+      backdropRef.current.style.transition = 'opacity 0.26s ease'
+      backdropRef.current.style.opacity    = '0'
+    }
+    setTimeout(onClose, 240)
+  }
 
   useEffect(() => {
     fetchSubtasks()
-    const onKey = e => { if (e.key === 'Escape') onClose() }
+    const onKey = e => { if (e.key === 'Escape') closeWithAnimation() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Prevent background page scroll on iOS; allow when we're in a drag-to-close gesture
+  // Prevent background page scroll on iOS for touches outside the panel
   useEffect(() => {
     const prevent = e => {
-      if (drag.current.active) { e.preventDefault(); return }
-      if (scrollRef.current && scrollRef.current.contains(e.target)) return
+      if (panelRef.current?.contains(e.target)) return
       e.preventDefault()
     }
     document.addEventListener('touchmove', prevent, { passive: false })
     return () => document.removeEventListener('touchmove', prevent)
   }, [])
 
-  function onDragStart(e) {
-    drag.current = { active: true, startY: e.touches[0].clientY, deltaY: 0 }
-  }
-  // Called from the scroll area — only start a close gesture if already at the top
-  function onScrollAreaTouchStart(e) {
-    if (scrollRef.current && scrollRef.current.scrollTop > 0) return
-    drag.current = { active: true, startY: e.touches[0].clientY, deltaY: 0 }
-  }
-  function onDragMove(e) {
-    if (!drag.current.active) return
-    const dy = e.touches[0].clientY - drag.current.startY
-    if (dy <= 0) { drag.current.active = false; return }
-    drag.current.deltaY = dy
-    if (panelRef.current) panelRef.current.style.transform = `translateY(${dy}px)`
-  }
-  function onDragEnd() {
-    if (!drag.current.active) return
-    drag.current.active = false
-    if (drag.current.deltaY > 60) {
-      onClose()
-    } else {
-      if (panelRef.current) {
-        panelRef.current.style.transition = 'transform 0.25s ease-out'
-        panelRef.current.style.transform = 'translateY(0)'
-        setTimeout(() => { if (panelRef.current) panelRef.current.style.transition = '' }, 250)
+  // Swipe-to-close: native listeners so we can call preventDefault on touchmove
+  useEffect(() => {
+    const panel  = panelRef.current
+    const scroll = scrollRef.current
+    if (!panel || !scroll) return
+
+    let startY = 0, deltaY = 0, active = false
+
+    const onPanelStart = e => {
+      if (scroll.contains(e.target)) return
+      panel.style.animation = 'none'  // animation-fill-mode:both locks transform; clear it so inline style wins
+      startY = e.touches[0].clientY; deltaY = 0; active = true
+    }
+    const onScrollStart = e => {
+      if (scroll.scrollTop > 0) return
+      panel.style.animation = 'none'
+      startY = e.touches[0].clientY; deltaY = 0; active = true
+    }
+    const onMove = e => {
+      if (!active) return
+      const dy = e.touches[0].clientY - startY
+      if (dy <= 0) { active = false; return }  // upward = cancel, let scroll work
+      e.preventDefault()                        // downward = prevent scroll, move panel
+      deltaY = dy
+      panel.style.transform = `translateY(${dy}px)`
+    }
+    const onEnd = () => {
+      if (!active) return
+      active = false
+      if (deltaY > panel.offsetHeight * 0.25) {
+        panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
+        panel.style.transform  = 'translateY(110%)'
+        setTimeout(() => onCloseRef.current(), 240)
+      } else {
+        panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
+        panel.style.transform  = 'translateY(0)'
+        setTimeout(() => { panel.style.transition = ''; panel.style.animation = '' }, 270)
       }
     }
-  }
+
+    panel.addEventListener ('touchstart', onPanelStart,  { passive: true  })
+    scroll.addEventListener('touchstart', onScrollStart, { passive: true  })
+    panel.addEventListener ('touchmove',  onMove,        { passive: false })
+    panel.addEventListener ('touchend',   onEnd)
+
+    return () => {
+      panel.removeEventListener ('touchstart', onPanelStart)
+      scroll.removeEventListener('touchstart', onScrollStart)
+      panel.removeEventListener ('touchmove',  onMove)
+      panel.removeEventListener ('touchend',   onEnd)
+    }
+  }, [])
 
   useEffect(() => {
     const el = titleRef.current
@@ -249,7 +288,7 @@ const [selectedTagIds, setSelectedTagIds] = useState(
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 dark:bg-black/60 z-40 animate-fade-in" onClick={onClose} />
+      <div ref={backdropRef} className="fixed inset-0 bg-black/40 dark:bg-black/60 z-40 animate-fade-in" onClick={closeWithAnimation} />
 
       <div className="fixed inset-0 z-50 flex flex-col justify-end md:items-center md:justify-center pointer-events-none">
         <div
@@ -262,12 +301,7 @@ const [selectedTagIds, setSelectedTagIds] = useState(
           )}
         >
           {/* Mobile drag handle */}
-          <div
-            className="md:hidden flex justify-center pt-3 pb-2 shrink-0 cursor-grab"
-            onTouchStart={onDragStart}
-            onTouchMove={onDragMove}
-            onTouchEnd={onDragEnd}
-          >
+          <div className="md:hidden flex justify-center pt-3 pb-2 shrink-0">
             <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
           </div>
 
@@ -276,9 +310,6 @@ const [selectedTagIds, setSelectedTagIds] = useState(
             ref={scrollRef}
             className="flex-1 min-h-0 overflow-y-scroll overscroll-contain"
             style={{ WebkitOverflowScrolling: 'touch' }}
-            onTouchStart={onScrollAreaTouchStart}
-            onTouchMove={onDragMove}
-            onTouchEnd={onDragEnd}
           >
           <div className="px-6 pt-5 pb-6">
 
@@ -297,7 +328,7 @@ const [selectedTagIds, setSelectedTagIds] = useState(
               <div className="flex items-center gap-2 shrink-0 mt-1">
                 {saving && <span className="text-xs text-gray-400 animate-fade-in">Saving…</span>}
                 <button
-                  onClick={onClose}
+                  onClick={closeWithAnimation}
                   className="w-11 h-11 md:w-7 md:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all active:scale-90 text-xl md:text-sm"
                 >✕</button>
               </div>
