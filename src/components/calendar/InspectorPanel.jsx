@@ -76,9 +76,10 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Prevent background scroll on mobile (iOS Safari ignores overflow:hidden on body)
+  // Prevent background scroll on mobile; allow when in a drag-to-close gesture
   useEffect(() => {
     const prevent = e => {
+      if (drag.current.active) { e.preventDefault(); return }
       if (scrollRef.current && scrollRef.current.contains(e.target)) return
       e.preventDefault()
     }
@@ -98,10 +99,15 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
     drag.current = { active: true, startY: e.touches[0].clientY, deltaY: 0 }
   }
 
+  function onScrollAreaTouchStart(e) {
+    if (scrollRef.current && scrollRef.current.scrollTop > 0) return
+    drag.current = { active: true, startY: e.touches[0].clientY, deltaY: 0 }
+  }
+
   function onDragMove(e) {
     if (!drag.current.active) return
     const dy = e.touches[0].clientY - drag.current.startY
-    if (dy <= 0) return
+    if (dy <= 0) { drag.current.active = false; return }
     drag.current.deltaY = dy
     if (panelRef.current) panelRef.current.style.transform = `translateY(${dy}px)`
   }
@@ -109,7 +115,7 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
   function onDragEnd() {
     if (!drag.current.active) return
     drag.current.active = false
-    if (drag.current.deltaY > 100) {
+    if (drag.current.deltaY > 60) {
       onClose()
     } else {
       if (panelRef.current) {
@@ -264,7 +270,7 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
       </div>
 
       {/* Scrollable body — min-h-0 is required on iOS for flex-1 scroll to work */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-scroll overscroll-contain px-4 py-4 space-y-5" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-scroll overscroll-contain px-4 py-4 space-y-5" style={{ WebkitOverflowScrolling: 'touch' }} onTouchStart={onScrollAreaTouchStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd}>
 
         {/* Tags */}
         <div>
