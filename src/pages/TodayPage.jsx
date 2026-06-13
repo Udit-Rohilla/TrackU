@@ -92,6 +92,38 @@ export default function TodayPage({ session }) {
     return () => clearInterval(id)
   }, [])
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('today-tasks-realtime')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks', filter: `user_id=eq.${session.user.id}` }, async payload => {
+        const { data } = await supabase
+          .from('tasks')
+          .select('*, task_tags(tags(id, name, color)), subtasks(id, is_done)')
+          .eq('id', payload.new.id)
+          .single()
+        if (!data || data.archived) {
+          setTasks(prev => prev.filter(t => t.id !== payload.new.id))
+          return
+        }
+        const [normalized] = normalizeTasks([data])
+        // done tasks don't belong on Today page
+        if (normalized.status === 'done') {
+          setTasks(prev => prev.filter(t => t.id !== normalized.id))
+        } else {
+          setTasks(prev => prev.some(t => t.id === normalized.id)
+            ? prev.map(t => t.id === normalized.id ? normalized : t)
+            : prev
+          )
+        }
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks', filter: `user_id=eq.${session.user.id}` }, payload => {
+        setTasks(prev => prev.filter(t => t.id !== payload.old.id))
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
   async function fetchData() {
     const [{ data: taskData }, { data: tagData }] = await Promise.all([
       supabase

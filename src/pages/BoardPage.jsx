@@ -89,6 +89,35 @@ export default function BoardPage({ session }) {
   useEffect(() => { tasksRef.current = tasks }, [tasks])
   useEffect(() => { fetchTasks(); fetchTags(); fetchNtfyTopic() }, [])
 
+  // Realtime sync — picks up changes made on other devices/sessions
+  useEffect(() => {
+    const channel = supabase
+      .channel('tasks-realtime')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks', filter: `user_id=eq.${session.user.id}` }, async payload => {
+        const { data } = await supabase
+          .from('tasks')
+          .select('*, task_tags(tags(id, name, color)), subtasks(id, is_done)')
+          .eq('id', payload.new.id)
+          .single()
+        if (!data) return
+        if (data.archived) {
+          setTasks(prev => prev.filter(t => t.id !== data.id))
+        } else {
+          const [normalized] = normalizeTasks([data])
+          setTasks(prev => prev.some(t => t.id === normalized.id)
+            ? prev.map(t => t.id === normalized.id ? normalized : t)
+            : [normalized, ...prev]
+          )
+        }
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks', filter: `user_id=eq.${session.user.id}` }, payload => {
+        setTasks(prev => prev.filter(t => t.id !== payload.old.id))
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
   useEffect(() => {
     const id = setInterval(() => {
       setTasks(prev => {
