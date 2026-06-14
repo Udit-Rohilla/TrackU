@@ -41,15 +41,16 @@ function toLocalInput(iso) {
 
 export default function TaskModal({ task, allTags, onClose, onTaskUpdate, onArchive }) {
   const [form, setForm] = useState({
-    title:             task.title || '',
-    status:            task.status || 'not_started',
-    priority:          task.priority || 'medium',
-    deadline:          toLocalInput(task.deadline),
-    color:             task.color || '',
-    notes:             task.notes || '',
-    is_recurring:      task.is_recurring || false,
-    recurrence_type:   task.recurrence_type || 'weekly',
-    recurrence_config: task.recurrence_config || {},
+    title:                      task.title || '',
+    status:                     task.status || 'not_started',
+    priority:                   task.priority || 'medium',
+    deadline:                   toLocalInput(task.deadline),
+    color:                      task.color || '',
+    notes:                      task.notes || '',
+    is_recurring:               task.is_recurring || false,
+    recurrence_type:            task.recurrence_type || 'weekly',
+    recurrence_config:          task.recurrence_config || {},
+    recurring_reminder_minutes: task.recurring_reminder_minutes ?? null,
   })
   const [subtasks, setSubtasks]             = useState([])
   const [newSubtask, setNewSubtask]         = useState('')
@@ -90,14 +91,23 @@ const [selectedTagIds, setSelectedTagIds] = useState(
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Prevent background page scroll on iOS for touches outside the panel
+  // Lock body scroll while modal is open.
+  // This is the correct iOS fix — without it, Safari scrolls the page behind the
+  // modal when the keyboard opens or when any element inside receives focus,
+  // which makes the fixed overlay visually jitter.
   useEffect(() => {
-    const prevent = e => {
-      if (panelRef.current?.contains(e.target)) return
-      e.preventDefault()
+    const scrollY = window.scrollY
+    document.body.style.overflow  = 'hidden'
+    document.body.style.position  = 'fixed'
+    document.body.style.top       = `-${scrollY}px`
+    document.body.style.width     = '100%'
+    return () => {
+      document.body.style.overflow  = ''
+      document.body.style.position  = ''
+      document.body.style.top       = ''
+      document.body.style.width     = ''
+      window.scrollTo(0, scrollY)
     }
-    document.addEventListener('touchmove', prevent, { passive: false })
-    return () => document.removeEventListener('touchmove', prevent)
   }, [])
 
   // Swipe-to-close: native listeners so we can call preventDefault on touchmove
@@ -107,49 +117,81 @@ const [selectedTagIds, setSelectedTagIds] = useState(
     if (!panel || !scroll) return
 
     let startY = 0, deltaY = 0, active = false
+    let lastY = 0, lastTime = 0, velocity = 0  // px/ms, positive = downward
 
-    const onPanelStart = e => {
-      if (scroll.contains(e.target)) return
-      panel.style.animation = 'none'  // animation-fill-mode:both locks transform; clear it so inline style wins
-      startY = e.touches[0].clientY; deltaY = 0; active = true
+    function startDrag(y) {
+      panel.style.animation  = 'none'
+      panel.style.willChange = 'transform'
+      startY = y; deltaY = 0; active = true
+      lastY = y; lastTime = Date.now(); velocity = 0
     }
-    const onScrollStart = e => {
-      if (scroll.scrollTop > 0) return
-      panel.style.animation = 'none'
-      startY = e.touches[0].clientY; deltaY = 0; active = true
-    }
+
+    const onPanelStart  = e => { if (!scroll.contains(e.target)) startDrag(e.touches[0].clientY) }
+    const onScrollStart = e => { if (scroll.scrollTop <= 0) startDrag(e.touches[0].clientY) }
+
     const onMove = e => {
       if (!active) return
-      const dy = e.touches[0].clientY - startY
-      if (dy <= 0) { active = false; return }  // upward = cancel, let scroll work
-      e.preventDefault()                        // downward = prevent scroll, move panel
+      const now = Date.now(), currentY = e.touches[0].clientY
+      const dt = now - lastTime
+      if (dt > 0) velocity = (currentY - lastY) / dt
+      lastY = currentY; lastTime = now
+
+      const dy = currentY - startY
+      if (dy <= 0) { active = false; panel.style.willChange = ''; return }
+      e.preventDefault()
       deltaY = dy
       panel.style.transform = `translateY(${dy}px)`
-    }
-    const onEnd = () => {
-      if (!active) return
-      active = false
-      if (deltaY > panel.offsetHeight * 0.25) {
-        panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
-        panel.style.transform  = 'translateY(110%)'
-        setTimeout(() => onCloseRef.current(), 240)
-      } else {
-        panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
-        panel.style.transform  = 'translateY(0)'
-        setTimeout(() => { panel.style.transition = ''; panel.style.animation = '' }, 270)
+
+      // Dim backdrop proportionally as panel moves down
+      const backdrop = backdropRef.current
+      if (backdrop) {
+        const progress = Math.min(1, dy / (panel.offsetHeight * 0.25))
+        backdrop.style.opacity = String(1 - progress * 0.5)
       }
     }
 
-    panel.addEventListener ('touchstart', onPanelStart,  { passive: true  })
-    scroll.addEventListener('touchstart', onScrollStart, { passive: true  })
-    panel.addEventListener ('touchmove',  onMove,        { passive: false })
-    panel.addEventListener ('touchend',   onEnd)
+    const onEnd = () => {
+      if (!active) return
+      active = false
+      panel.style.willChange = ''
+      const backdrop = backdropRef.current
+      // Close if dragged past 25% OR flicked fast (> 0.5 px/ms)
+      if (deltaY > panel.offsetHeight * 0.25 || velocity > 0.5) {
+        panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
+        panel.style.transform  = 'translateY(110%)'
+        if (backdrop) {
+          backdrop.style.transition = 'opacity 0.26s ease'
+          backdrop.style.opacity    = '0'
+        }
+        setTimeout(() => onCloseRef.current(), 240)
+      } else {
+        // Spring snap-back — overshoot easing feels alive
+        panel.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)'
+        panel.style.transform  = 'translateY(0)'
+        if (backdrop) {
+          backdrop.style.transition = 'opacity 0.3s ease'
+          backdrop.style.opacity    = '1'
+        }
+        setTimeout(() => {
+          panel.style.transition = ''
+          panel.style.animation  = ''
+          if (backdrop) backdrop.style.transition = ''
+        }, 420)
+      }
+    }
+
+    panel.addEventListener ('touchstart',  onPanelStart,  { passive: true  })
+    scroll.addEventListener('touchstart',  onScrollStart, { passive: true  })
+    panel.addEventListener ('touchmove',   onMove,        { passive: false })
+    panel.addEventListener ('touchend',    onEnd)
+    panel.addEventListener ('touchcancel', onEnd)
 
     return () => {
-      panel.removeEventListener ('touchstart', onPanelStart)
-      scroll.removeEventListener('touchstart', onScrollStart)
-      panel.removeEventListener ('touchmove',  onMove)
-      panel.removeEventListener ('touchend',   onEnd)
+      panel.removeEventListener ('touchstart',  onPanelStart)
+      scroll.removeEventListener('touchstart',  onScrollStart)
+      panel.removeEventListener ('touchmove',   onMove)
+      panel.removeEventListener ('touchend',    onEnd)
+      panel.removeEventListener ('touchcancel', onEnd)
     }
   }, [])
 
@@ -204,6 +246,16 @@ const [selectedTagIds, setSelectedTagIds] = useState(
       }
       return
     }
+    if (field === 'is_recurring') {
+      if (value) {
+        persist({ is_recurring: true })
+      } else {
+        // Clear reminder time when turning recurring off
+        setForm(prev => ({ ...prev, is_recurring: false, recurring_reminder_minutes: null }))
+        persist({ is_recurring: false, recurring_reminder_minutes: null })
+      }
+      return
+    }
     persist({ [field]: value ?? null })
   }
 
@@ -216,6 +268,24 @@ const [selectedTagIds, setSelectedTagIds] = useState(
   function handleDeadlineChange(val) {
     setForm(p => ({ ...p, deadline: val }))
     persist({ deadline: val ? new Date(val).toISOString() : null, deadline_notified: false })
+  }
+
+  // Converts integer minutes-since-midnight to "HH:MM" for the time input
+  function minutesToTimeStr(mins) {
+    if (mins == null) return ''
+    return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
+  }
+
+  function handleReminderTimeChange(timeStr) {
+    if (!timeStr) {
+      setForm(p => ({ ...p, recurring_reminder_minutes: null }))
+      persist({ recurring_reminder_minutes: null })
+      return
+    }
+    const [h, m] = timeStr.split(':').map(Number)
+    const mins = h * 60 + m
+    setForm(p => ({ ...p, recurring_reminder_minutes: mins }))
+    persist({ recurring_reminder_minutes: mins })
   }
 
   async function toggleTag(tagId) {
@@ -295,7 +365,7 @@ const [selectedTagIds, setSelectedTagIds] = useState(
           ref={panelRef}
           className={clsx(
             'pointer-events-auto bg-white dark:bg-gray-900 shadow-2xl w-full flex flex-col overflow-hidden',
-            'rounded-t-2xl max-h-[92vh]',
+            'rounded-t-2xl max-h-[92svh]',
             'md:rounded-2xl md:w-[800px] md:max-h-[88vh]',
             'animate-slide-up md:animate-scale-in',
           )}
@@ -391,26 +461,52 @@ const [selectedTagIds, setSelectedTagIds] = useState(
                   </div>
                 </div>
 
-                {/* Deadline */}
+                {/* Deadline / Reminder Time */}
                 <div>
-                  <Label>Deadline</Label>
-                  <div className="flex items-stretch gap-2">
-                    <input
-                      type="datetime-local"
-                      value={form.deadline}
-                      onChange={e => handleDeadlineChange(e.target.value)}
-                      className={clsx(
-                        'flex-1 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-purple-400 transition-colors',
-                        form.deadline ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500',
-                      )}
-                    />
-                    {form.deadline && (
-                      <button
-                        onClick={() => handleDeadlineChange('')}
-                        className="shrink-0 text-xs px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-400 hover:text-red-500 hover:border-red-200 dark:hover:border-red-800 transition-colors font-medium"
-                      >Clear</button>
-                    )}
-                  </div>
+                  {form.is_recurring ? (
+                    <>
+                      <Label>Reminder Time</Label>
+                      <div className="flex items-stretch gap-2">
+                        <input
+                          type="time"
+                          value={minutesToTimeStr(form.recurring_reminder_minutes)}
+                          onChange={e => handleReminderTimeChange(e.target.value)}
+                          className={clsx(
+                            'flex-1 text-base md:text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-purple-400 transition-colors',
+                            form.recurring_reminder_minutes != null ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500',
+                          )}
+                        />
+                        {form.recurring_reminder_minutes != null && (
+                          <button
+                            onClick={() => handleReminderTimeChange('')}
+                            className="shrink-0 text-xs px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-400 hover:text-red-500 hover:border-red-200 dark:hover:border-red-800 transition-colors font-medium"
+                          >Clear</button>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">Notified at this time on each recurrence day.</p>
+                    </>
+                  ) : (
+                    <>
+                      <Label>Deadline</Label>
+                      <div className="flex items-stretch gap-2">
+                        <input
+                          type="datetime-local"
+                          value={form.deadline}
+                          onChange={e => handleDeadlineChange(e.target.value)}
+                          className={clsx(
+                            'flex-1 text-base md:text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-purple-400 transition-colors',
+                            form.deadline ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500',
+                          )}
+                        />
+                        {form.deadline && (
+                          <button
+                            onClick={() => handleDeadlineChange('')}
+                            className="shrink-0 text-xs px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-400 hover:text-red-500 hover:border-red-200 dark:hover:border-red-800 transition-colors font-medium"
+                          >Clear</button>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Tags */}
@@ -524,7 +620,7 @@ const [selectedTagIds, setSelectedTagIds] = useState(
                           if (e.key === 'Escape') setNewSubtask('')
                         }}
                         placeholder="+ Add Subtask"
-                        className="flex-1 text-sm bg-transparent outline-none text-purple-600 dark:text-purple-400 placeholder-purple-400 dark:placeholder-purple-600 font-medium"
+                        className="flex-1 text-base md:text-sm bg-transparent outline-none text-purple-600 dark:text-purple-400 placeholder-purple-400 dark:placeholder-purple-600 font-medium"
                       />
                     </div>
                 </div>
@@ -538,7 +634,7 @@ const [selectedTagIds, setSelectedTagIds] = useState(
                     onBlur={() => { if (form.notes !== task.notes) persist({ notes: form.notes || null }) }}
                     rows={4}
                     placeholder="Add additional details or links here…"
-                    className="w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white outline-none focus:border-purple-400 resize-none placeholder-gray-300 dark:placeholder-gray-600 transition-colors"
+                    className="w-full text-base md:text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white outline-none focus:border-purple-400 resize-none placeholder-gray-300 dark:placeholder-gray-600 transition-colors"
                   />
                 </div>
 
@@ -641,7 +737,7 @@ const [selectedTagIds, setSelectedTagIds] = useState(
                               onChange={e => setForm(p => ({ ...p, recurrence_config: { ...p.recurrence_config, day: parseInt(e.target.value) || null } }))}
                               onBlur={e => persist({ recurrence_config: { ...form.recurrence_config, day: parseInt(e.target.value) || null } })}
                               placeholder="1–31"
-                              className="w-16 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-gray-900 dark:text-white outline-none focus:border-purple-400 text-center"
+                              className="w-16 text-base md:text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-gray-900 dark:text-white outline-none focus:border-purple-400 text-center"
                             />
                           </div>
                         </div>
@@ -719,7 +815,7 @@ function SortableSubtaskRow({ sub, isEditing, editTitle, onEditTitleChange, onTo
             if (e.key === 'Enter') { e.preventDefault(); onCommitEdit() }
             if (e.key === 'Escape') onCancelEdit()
           }}
-          className="flex-1 text-sm bg-transparent outline-none border-b border-purple-400 text-gray-900 dark:text-white"
+          className="flex-1 text-base md:text-sm bg-transparent outline-none border-b border-purple-400 text-gray-900 dark:text-white"
         />
       ) : (
         <span className={clsx('flex-1 text-sm text-gray-700 dark:text-gray-300', sub.is_done && 'opacity-40')}>

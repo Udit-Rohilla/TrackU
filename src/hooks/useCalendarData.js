@@ -133,11 +133,28 @@ export function useCalendarData(session) {
 
   function handleTaskUpdate(updatedRaw) {
     const [normalized] = normalizeTasks([updatedRaw])
-    // Only update real tasks; leave virtual history entries untouched
     setTasks(prev => prev.map(t =>
       !t._isHistory && t.id === normalized.id ? { ...t, ...normalized } : t
     ))
   }
 
-  return { tasks, allTags, loading, handleTaskUpdate }
+  async function addTask(date, title) {
+    const now = new Date()
+    // Deadline = the target day at the current clock time
+    const deadline = new Date(date)
+    deadline.setHours(now.getHours(), now.getMinutes(), 0, 0)
+
+    const { data } = await supabase
+      .from('tasks')
+      .insert({ user_id: session.user.id, title, status: 'not_started', deadline: deadline.toISOString() })
+      .select('*, task_tags(tags(id, name, color)), subtasks(id, is_done)')
+      .single()
+
+    if (data) {
+      const [normalized] = normalizeTasks([data])
+      setTasks(prev => [...prev, normalized])
+    }
+  }
+
+  return { tasks, allTags, loading, handleTaskUpdate, addTask }
 }

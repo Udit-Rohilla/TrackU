@@ -7,7 +7,7 @@ import MonthView from '../components/calendar/MonthView'
 import WeekView from '../components/calendar/WeekView'
 import MobileWeekView from '../components/calendar/MobileWeekView'
 import DayPanel from '../components/calendar/DayPanel'
-import InspectorPanel from '../components/calendar/InspectorPanel'
+import TaskModal from '../components/tasks/TaskModal'
 
 const RECURRING_FILTERS = [
   { id: 'all',       label: 'All' },
@@ -23,7 +23,7 @@ const STATUS_FILTERS = [
 ]
 
 export default function CalendarPage({ session }) {
-  const { tasks, allTags, loading, handleTaskUpdate } = useCalendarData(session)
+  const { tasks, allTags, loading, handleTaskUpdate, addTask } = useCalendarData(session)
 
   const [viewMode, setViewMode]       = useState(localStorage.getItem('tracku_calendar_view') || 'week')
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -394,6 +394,7 @@ export default function CalendarPage({ session }) {
               currentDate={currentDate}
               tasks={filteredTasks}
               onTaskClick={handleTaskClick}
+              onAddTask={addTask}
             />
           ) : (
             <MonthView
@@ -434,7 +435,7 @@ export default function CalendarPage({ session }) {
         )}
 
         {inspectedTask && (
-          <InspectorPanel
+          <TaskModal
             key={inspectedTask.id}
             task={inspectedTask}
             allTags={allTags}

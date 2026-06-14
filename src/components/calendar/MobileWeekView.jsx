@@ -30,17 +30,19 @@ const TYPE_DOT = {
   completed: 'bg-green-400',
 }
 
-export default function MobileWeekView({ currentDate, tasks, onTaskClick }) {
+export default function MobileWeekView({ currentDate, tasks, onTaskClick, onAddTask }) {
   const days = getWeekDays(currentDate)
   const today = startOfDay(new Date())
   const now = new Date()
 
-  // Today expanded by default, everything else collapsed
   const [expanded, setExpanded] = useState(() => {
     const set = new Set()
     days.forEach((d, i) => { if (isSameDay(d, today)) set.add(i) })
     return set
   })
+  const [addingDay, setAddingDay]   = useState(null)
+  const [newTitle, setNewTitle]     = useState('')
+  const [saving, setSaving]         = useState(false)
 
   function toggle(i) {
     setExpanded(prev => {
@@ -48,6 +50,16 @@ export default function MobileWeekView({ currentDate, tasks, onTaskClick }) {
       next.has(i) ? next.delete(i) : next.add(i)
       return next
     })
+  }
+
+  async function submitTask(day) {
+    const title = newTitle.trim()
+    if (!title) { setAddingDay(null); return }
+    setSaving(true)
+    await onAddTask(day, title)
+    setNewTitle('')
+    setAddingDay(null)
+    setSaving(false)
   }
 
   return (
@@ -120,7 +132,7 @@ export default function MobileWeekView({ currentDate, tasks, onTaskClick }) {
 
             {/* Expandable content */}
             {isOpen && (
-              <div className="px-5 pb-6">
+              <div className="px-5 pb-5">
                 {allEntries.length > 0 && (
                   <div className="space-y-3 mb-4">
                     {allEntries.map(({ task, type }) => (
@@ -143,8 +155,32 @@ export default function MobileWeekView({ currentDate, tasks, onTaskClick }) {
                   </div>
                 )}
 
-                {!isToday && allEntries.length === 0 && (
-                  <p className="text-sm text-gray-400/60 dark:text-gray-700">No tasks</p>
+                {/* Add task row */}
+                {addingDay === i ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0" />
+                    <input
+                      autoFocus
+                      value={newTitle}
+                      onChange={e => setNewTitle(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') submitTask(day)
+                        if (e.key === 'Escape') { setAddingDay(null); setNewTitle('') }
+                      }}
+                      onBlur={() => submitTask(day)}
+                      disabled={saving}
+                      placeholder="Task title…"
+                      className="flex-1 bg-transparent text-sm font-medium text-gray-800 dark:text-gray-100 placeholder-gray-400/60 dark:placeholder-gray-600 outline-none border-b border-purple-400/60 pb-0.5"
+                    />
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setAddingDay(i); setNewTitle('') }}
+                    className="mt-1 flex items-center gap-2 text-sm text-gray-400/70 dark:text-gray-600 hover:text-purple-500 dark:hover:text-purple-400 transition-colors active:opacity-60"
+                  >
+                    <span className="text-base leading-none">+</span>
+                    <span>Add task</span>
+                  </button>
                 )}
               </div>
             )}

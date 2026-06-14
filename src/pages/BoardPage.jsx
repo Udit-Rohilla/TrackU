@@ -8,7 +8,7 @@ import { arrayMove } from '@dnd-kit/sortable'
 import clsx from 'clsx'
 import { supabase } from '../lib/supabase'
 import { computeTimeLogged } from '../lib/time'
-import { sendNtfyNotification, getDeadlinePendingTasks, getOverduePendingTasks, getHourlyOverdueTasks, markHourlyOverdueNotified, pruneOverdueTimestamps } from '../lib/notifications'
+import { sendNtfyNotification, getDeadlinePendingTasks, getOverduePendingTasks, getHourlyOverdueTasks, markHourlyOverdueNotified, pruneOverdueTimestamps, getRecurringNotifyTasks, markRecurringHourlyNotified } from '../lib/notifications'
 import KanbanColumn from '../components/board/KanbanColumn'
 import { TaskCardDisplay } from '../components/board/TaskCard'
 import TaskModal from '../components/tasks/TaskModal'
@@ -151,6 +151,34 @@ export default function BoardPage({ session }) {
           setTasks(prev => prev.map(t => t.id === task.id ? { ...t, deadline_overdue_notified: true } : t))
           markHourlyOverdueNotified(task.id)
         }
+      }
+      // Recurring reminders — query recurring_history to know what's done today
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+      const { data: histData } = await supabase
+        .from('recurring_history')
+        .select('task_id')
+        .eq('user_id', session.user.id)
+        .eq('was_completed', true)
+        .gte('completed_at', todayStart.toISOString())
+      const doneTodayIds = new Set((histData || []).map(h => h.task_id))
+      const now = new Date()
+      const nowMins = now.getHours() * 60 + now.getMinutes()
+      for (const task of getRecurringNotifyTasks(tasksRef.current, doneTodayIds)) {
+        const r = task.recurring_reminder_minutes
+        const isOverdue = nowMins >= r
+        let title, body
+        if (isOverdue) {
+          const overdueH = Math.floor((nowMins - r) / 60)
+          title = overdueH < 1 ? `Overdue: ${task.title}` : `Still overdue (${overdueH}h): ${task.title}`
+          body  = 'Mark this recurring task as done for today.'
+        } else {
+          const hoursUntil = Math.round((r - nowMins) / 60)
+          const dueAt = `${String(Math.floor(r / 60)).padStart(2, '0')}:${String(r % 60).padStart(2, '0')}`
+          title = hoursUntil <= 1 ? `Due in ~1h: ${task.title}` : `Reminder in ${hoursUntil}h: ${task.title}`
+          body  = `Scheduled for ${dueAt}`
+        }
+        const ok = await sendNtfyNotification(ntfyTopic, title, body)
+        if (ok) markRecurringHourlyNotified(task.id, isOverdue)
       }
       pruneOverdueTimestamps(tasksRef.current)
       for (const task of getHourlyOverdueTasks(tasksRef.current)) {

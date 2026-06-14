@@ -112,49 +112,64 @@ export default function InspectorPanel({ task, allTags, onClose, onTaskUpdate, o
     if (!panel || !scroll) return
 
     let startY = 0, deltaY = 0, active = false
+    let lastY = 0, lastTime = 0, velocity = 0  // px/ms, positive = downward
 
-    const onPanelStart = e => {
-      if (scroll.contains(e.target)) return
-      panel.style.animation = 'none'
-      startY = e.touches[0].clientY; deltaY = 0; active = true
+    function startDrag(y) {
+      panel.style.animation  = 'none'
+      panel.style.willChange = 'transform'
+      startY = y; deltaY = 0; active = true
+      lastY = y; lastTime = Date.now(); velocity = 0
     }
-    const onScrollStart = e => {
-      if (scroll.scrollTop > 0) return
-      panel.style.animation = 'none'
-      startY = e.touches[0].clientY; deltaY = 0; active = true
-    }
+
+    const onPanelStart  = e => { if (!scroll.contains(e.target)) startDrag(e.touches[0].clientY) }
+    const onScrollStart = e => { if (scroll.scrollTop <= 0) startDrag(e.touches[0].clientY) }
+
     const onMove = e => {
       if (!active) return
-      const dy = e.touches[0].clientY - startY
-      if (dy <= 0) { active = false; return }
+      const now = Date.now(), currentY = e.touches[0].clientY
+      const dt = now - lastTime
+      if (dt > 0) velocity = (currentY - lastY) / dt
+      lastY = currentY; lastTime = now
+
+      const dy = currentY - startY
+      if (dy <= 0) { active = false; panel.style.willChange = ''; return }
       e.preventDefault()
       deltaY = dy
       panel.style.transform = `translateY(${dy}px)`
     }
+
     const onEnd = () => {
       if (!active) return
       active = false
-      if (deltaY > panel.offsetHeight * 0.25) {
+      panel.style.willChange = ''
+      // Close if dragged past 25% OR flicked fast (> 0.5 px/ms)
+      if (deltaY > panel.offsetHeight * 0.25 || velocity > 0.5) {
         panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
         panel.style.transform  = 'translateY(110%)'
         setTimeout(() => onCloseRef.current(), 240)
       } else {
-        panel.style.transition = 'transform 0.26s cubic-bezier(0.4, 0, 1, 1)'
+        // Spring snap-back — overshoot easing feels alive
+        panel.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)'
         panel.style.transform  = 'translateY(0)'
-        setTimeout(() => { panel.style.transition = ''; panel.style.animation = '' }, 270)
+        setTimeout(() => {
+          panel.style.transition = ''
+          panel.style.animation  = ''
+        }, 420)
       }
     }
 
-    panel.addEventListener ('touchstart', onPanelStart,  { passive: true  })
-    scroll.addEventListener('touchstart', onScrollStart, { passive: true  })
-    panel.addEventListener ('touchmove',  onMove,        { passive: false })
-    panel.addEventListener ('touchend',   onEnd)
+    panel.addEventListener ('touchstart',  onPanelStart,  { passive: true  })
+    scroll.addEventListener('touchstart',  onScrollStart, { passive: true  })
+    panel.addEventListener ('touchmove',   onMove,        { passive: false })
+    panel.addEventListener ('touchend',    onEnd)
+    panel.addEventListener ('touchcancel', onEnd)
 
     return () => {
-      panel.removeEventListener ('touchstart', onPanelStart)
-      scroll.removeEventListener('touchstart', onScrollStart)
-      panel.removeEventListener ('touchmove',  onMove)
-      panel.removeEventListener ('touchend',   onEnd)
+      panel.removeEventListener ('touchstart',  onPanelStart)
+      scroll.removeEventListener('touchstart',  onScrollStart)
+      panel.removeEventListener ('touchmove',   onMove)
+      panel.removeEventListener ('touchend',    onEnd)
+      panel.removeEventListener ('touchcancel', onEnd)
     }
   }, [])
 
